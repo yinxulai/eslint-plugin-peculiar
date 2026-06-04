@@ -18,11 +18,12 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 24
           registry-url: https://registry.npmjs.org
-          cache: npm
+          # release builds 不缓存 —— npm Trusted Publishers 文档明确要求
+          package-manager-cache: false
 
       - name: Install dependencies
         run: npm ci
@@ -46,8 +47,9 @@ jobs:
       - name: Publish to npm via OIDC
         # OIDC 流程:
         #   1. GitHub 颁发短期 OIDC token (id-token: write)
-        #   2. setup-node@v4 + registry-url 把 registry 写进 .npmrc
-        #   3. npm 检测到 OIDC 环境,自动用 OIDC token 认证
+        #   2. setup-node@v6 + registry-url 把 registry 写进 .npmrc
+        #   3. npm 11.5.1+ (Node 22.14.0+ 自带) 检测到 OIDC 环境,自动用 OIDC token 认证
+        #   4. npm 自动生成 provenance statement 并 attach 到 package
         #   4. npmjs.com 校验 trusted publisher 配置后允许发布
         # 因此: 不需要 NODE_AUTH_TOKEN, 不需要 --provenance (自动生成)
         run: npm publish --access public
