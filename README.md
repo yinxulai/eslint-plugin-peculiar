@@ -183,10 +183,10 @@ class A { method(coord) {} }
 npm install
 npm run build         # tsc → output/ (test 文件不会进 output)
 npm test              # vitest 跑全部规则 + 插件结构测试
-npm run test
+npm run coverage      # 附带 v8 覆盖率报告
 ```
 
-测试栈：[**Vitest**](https://vitest.dev/) + ESLint 8 提供的 `FlatRuleTester`（在 `eslint/use-at-your-own-risk` 入口）。测试用 **TypeScript** 编写，并与对应实现文件**并列**放：
+测试栈：[**Vitest**](https://vitest.dev/) + ESLint 9 提供的 `RuleTester`（从 `eslint` 直接 import）。测试用 **TypeScript** 编写，并与对应实现文件**并列**放：
 
 ```
 source/

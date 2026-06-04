@@ -13,10 +13,16 @@ describe('plugin shape', () => {
 
   it('each rule has meta and create', () => {
     for (const [name, rule] of Object.entries(plugin.rules)) {
-      expect(rule.meta, `${name} should have meta`).toBeDefined()
-      expect(rule.meta.type, `${name} should have meta.type`).toBeTruthy()
-      expect(rule.meta.docs, `${name} should have meta.docs`).toBeDefined()
-      expect(typeof rule.create, `${name} should have create()`).toBe('function')
+      // plugin.rules 是 heterogeneous, Object.entries 的 value 推断为 unknown
+      // 在 strict 模式下,unknown 不能直接访问属性,这里用局部断言收敛类型
+      const r = rule as unknown as {
+        meta: { type: string; docs: unknown }
+        create: unknown
+      }
+      expect(r.meta, `${name} should have meta`).toBeDefined()
+      expect(r.meta.type, `${name} should have meta.type`).toBeTruthy()
+      expect(r.meta.docs, `${name} should have meta.docs`).toBeDefined()
+      expect(typeof r.create, `${name} should have create()`).toBe('function')
     }
   })
 
@@ -40,8 +46,8 @@ describe('plugin shape', () => {
     })
 
     it('strict uses error severity on every rule', () => {
-      const rules = plugin.configs.strict.rules as Record<string, readonly [string]>
-      for (const [key, value] of Object.entries(rules)) {
+      for (const [key, value] of Object.entries(plugin.configs.strict.rules)) {
+        // value 的类型是 readonly [string, ...unknown[]], 只取第一个元素即可
         expect(value[0], `rule ${key} should be 'error'`).toBe('error')
       }
     })
@@ -95,8 +101,7 @@ describe('plugin shape', () => {
 
     it('flat/strict uses error severity on every rule', () => {
       const block = plugin.configs['flat/strict'][0]!
-      const rules = block.rules as Record<string, readonly [string]>
-      for (const [key, value] of Object.entries(rules)) {
+      for (const [key, value] of Object.entries(block.rules)) {
         expect(value[0], `rule ${key} should be 'error'`).toBe('error')
       }
     })

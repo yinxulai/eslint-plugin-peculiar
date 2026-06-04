@@ -1,11 +1,21 @@
 import funcDefinition from './rules/func-definition'
 import signatureLinebreak from './rules/signature-linebreak'
 import paramDestructuring from './rules/param-destructuring'
+// 直接从 package.json 读取元信息 ——
+ // `package.json` 与 `output/` 在发包后平级,运行时 `require('../package.json')` 能找到
+import pkg from '../package.json'
+
+/**
+ * 推荐预设里的 `signature-linebreak` 选项 —— 强制签名单行。
+ * 4 个 config(recommended / strict / flat/recommended / flat/strict)共用,
+ * 抽出来避免重复字面量。
+ */
+const FORCE_SINGLE_LINE = { style: 'single' } as const
 
 const plugin = {
   meta: {
-    name: '@yinxulai/eslint-plugin-peculiar',
-    version: '1.0.0',
+    name: pkg.name,
+    version: pkg.version,
   },
   rules: {
     'func-definition': funcDefinition,
@@ -30,7 +40,7 @@ const recommended = {
   plugins: ['@yinxulai/peculiar'],
   rules: {
     '@yinxulai/peculiar/func-definition': ['warn'],
-    '@yinxulai/peculiar/signature-linebreak': ['warn', { style: 'single' }],
+    '@yinxulai/peculiar/signature-linebreak': ['warn', FORCE_SINGLE_LINE],
     '@yinxulai/peculiar/param-destructuring': ['warn'],
   },
 } as const
@@ -46,7 +56,7 @@ const strict = {
   plugins: ['@yinxulai/peculiar'],
   rules: {
     '@yinxulai/peculiar/func-definition': ['error'],
-    '@yinxulai/peculiar/signature-linebreak': ['error', { style: 'single' }],
+    '@yinxulai/peculiar/signature-linebreak': ['error', FORCE_SINGLE_LINE],
     '@yinxulai/peculiar/param-destructuring': ['error'],
   },
 } as const
@@ -70,7 +80,7 @@ const flatRecommended = [
     plugins: { peculiar: plugin },
     rules: {
       'peculiar/func-definition': ['warn'],
-      'peculiar/signature-linebreak': ['warn', { style: 'single' }],
+      'peculiar/signature-linebreak': ['warn', FORCE_SINGLE_LINE],
       'peculiar/param-destructuring': ['warn'],
     },
   },
@@ -84,7 +94,7 @@ const flatStrict = [
     plugins: { peculiar: plugin },
     rules: {
       'peculiar/func-definition': ['error'],
-      'peculiar/signature-linebreak': ['error', { style: 'single' }],
+      'peculiar/signature-linebreak': ['error', FORCE_SINGLE_LINE],
       'peculiar/param-destructuring': ['error'],
     },
   },
