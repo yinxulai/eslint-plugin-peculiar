@@ -1,6 +1,6 @@
 {
   "name": "@yinxulai/eslint-plugin-peculiar",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Peculiar ESLint plugin with custom function-related rules: definition allowance, signature linebreaks, and maximum parameter count.",
   "homepage": "https://github.com/yinxulai/eslint-plugin-peculiar#readme",
   "bugs": {
