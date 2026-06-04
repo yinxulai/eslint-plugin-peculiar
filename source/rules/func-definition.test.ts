@@ -54,6 +54,13 @@ describe('func-definition', () => {
       // allow: ['declaration', 'method']
       { code: 'function foo() {}', options: [{ allow: ['declaration', 'method'] }] },
       { code: 'class A { foo() {} }', options: [{ allow: ['declaration', 'method'] }] },
+
+      // TSDeclareFunction - 默认放行 + allow: ['declaration']
+      { code: 'declare function foo(): void' },
+      {
+        code: 'declare function bar(): void',
+        options: [{ allow: ['declaration'] }],
+      },
     ],
     invalid: [
       {
@@ -78,6 +85,12 @@ describe('func-definition', () => {
       },
       {
         code: 'const obj = { foo() {} }',
+        options: [{ allow: ['arrow'] }],
+        errors: [{ messageId: 'disallowedFunction' }],
+      },
+      // TSDeclareFunction 不在 allow 列表中
+      {
+        code: 'declare function foo(): void',
         options: [{ allow: ['arrow'] }],
         errors: [{ messageId: 'disallowedFunction' }],
       },
