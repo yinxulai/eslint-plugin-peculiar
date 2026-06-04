@@ -191,15 +191,15 @@ const rule: Rule.RuleModule = {
     ],
     messages: {
       expectedSingleLine:
-        'Function signature should be on a single line.',
+        'Function signature should be on a single line. Consider simplifying parameter types, using shorter names, or extracting type declarations outside the signature.',
       expectedMultipleLines:
-        'Function signature should be split across multiple lines (one parameter per line).',
+        'Function signature should be split across multiple lines (one parameter per line). To keep it on a single line, consider extracting type declarations outside the signature.',
       expectedConsistent:
-        'Function signature should be either all on one line, or split with each parameter on its own line.',
+        'Function signature should be either all on one line, or split with each parameter on its own line. Choose one style and apply it consistently. For complex signatures, extracting type declarations can help maintain single-line format.',
       paramShouldBeOnOwnLine:
-        'In a multi-line signature, each parameter must be on its own line.',
+        'In a multi-line signature, each parameter must be on its own line. Place each parameter on a separate line, or refactor to a single-line signature by extracting type declarations.',
       signatureTooLong:
-        'Function signature is too long ({{length}} chars). Maximum allowed is {{max}}.',
+        'Function signature is too long ({{length}} chars). Maximum allowed is {{max}}. For single-line signatures, consider extracting type declarations outside the signature and referencing them within.',
     },
   },
   create(context: Rule.RuleContext) {
