@@ -49,6 +49,55 @@ describe('func-signature-linebreak', () => {
       { code: 'function foo(a, b) {}' },
       { code: 'function foo(\n  a,\n  b\n) {}' },
       { code: 'function foo(\n  a,\n  b,\n  c\n) {}' },
+
+      // ---- 嵌套箭头函数(无外层括号)在外层 call 内:fix 不应误伤外层 ----
+      // 1 参无括号箭头 `async request => {...}` 嵌在 `server.post('...', ...)` 内。
+      // v1.0.2 的 `getOpenCloseParen` 找 `request` 之前的 `(` 时拿到外层 `.post(` 的
+      // 括号,把两者之间所有内容(包括函数体)压成一行,破坏代码。
+      // 修复后:1 参(以及 0 参)都不应触发签名检查,无论 style 是什么。
+      {
+        code:
+          'const handler = {\n' +
+          '  do: () => {\n' +
+          "    return server.post('/p', async request => {\n" +
+          '      return { ok: true }\n' +
+          '    })\n' +
+          '  },\n' +
+          '}',
+        options: [{ style: 'multiple' }],
+      },
+      {
+        // 同上,但用 recommended preset 的 `style: 'single'` —— 这才是 v1.0.2 触发 bug 的现场
+        code:
+          'const handler = {\n' +
+          '  do: () => {\n' +
+          "    return server.post('/p', async request => {\n" +
+          '      return { ok: true }\n' +
+          '    })\n' +
+          '  },\n' +
+          '}',
+        options: [{ style: 'single' }],
+      },
+      // 0 参无括号箭头 + 外层 call:同样不应误伤
+      {
+        code: "server.post('/p', () => {\n  return 1\n})",
+        options: [{ style: 'multiple' }],
+      },
+      {
+        code: "server.post('/p', () => {\n  return 1\n})",
+        options: [{ style: 'single' }],
+      },
+
+      // ---- 2 参 + outer call:`(` 紧贴 first/last,理论上不会跨外层;
+      // 显式 fixture 防止 in-node 防御退化 ----
+      // 2 参 + outer call + style: 'multiple' + 正确 multiline own-line
+      { code: "server.post('/p', function (\n  a,\n  b\n) {})", options: [{ style: 'multiple' }] },
+      // 2 参 + outer call + style: 'single' + 单行
+      { code: "server.post('/p', function (a, b) {})", options: [{ style: 'single' }] },
+      // arrow 2 参 + outer call + style: 'multiple' + 正确
+      { code: "server.post('/p', (\n  a,\n  b\n) => a + b)", options: [{ style: 'multiple' }] },
+      // 深度 nested (2 层 call + function)
+      { code: "server.post('/p', server.foo(function (\n  a,\n  b\n) {}))", options: [{ style: 'multiple' }] },
     ],
     invalid: [
       // style: 'multiple' but single-line
@@ -209,6 +258,83 @@ describe('func-signature-linebreak', () => {
         code: 'function foo(\n  a, b\n) {}',
         output: 'function foo(\n  a,\n  b\n) {}',
         errors: [{ messageId: 'expectedConsistent' }],
+      },
+
+      // ---- 2 参 + outer call:4 个 fix 方向都应在嵌套场景下正确 ----
+      // (in-node 范围限制理论上让 2 参路径安全 —— `(` 紧贴 first;
+      //  显式 fixture 防回归,覆盖全部 fix 方向 + 多种 node 形式)
+
+      // expectedMultipleLines:2 参 + outer call + style: 'multiple' + 单行
+      {
+        code: "server.post('/p', function (a, b) {})",
+        output: "server.post('/p', function (\n  a,\n  b\n) {})",
+        options: [{ style: 'multiple' }],
+        errors: [{ messageId: 'expectedMultipleLines' }],
+      },
+      // expectedSingleLine:2 参 + outer call + style: 'single' + 多行
+      // (注意:fix 范围 = `function (...)` 内部,不是外层 `.post(...)` 之间)
+      {
+        code: "server.post('/p', function (\n  a,\n  b\n) {})",
+        output: "server.post('/p', function (a, b) {})",
+        options: [{ style: 'single' }],
+        errors: [{ messageId: 'expectedSingleLine' }],
+      },
+      // paramShouldBeOnOwnLine:2 参 + outer call + style: 'multiple' + 多行但参数未分行
+      {
+        code: "server.post('/p', function (\n  a, b\n) {})",
+        output: "server.post('/p', function (\n  a,\n  b\n) {})",
+        options: [{ style: 'multiple' }],
+        errors: [{ messageId: 'paramShouldBeOnOwnLine' }],
+      },
+      // expectedConsistent:2 参 + outer call + style: 'consistent' + 多行但参数未分行
+      {
+        code: "server.post('/p', function (\n  a, b\n) {})",
+        output: "server.post('/p', function (\n  a,\n  b\n) {})",
+        options: [{ style: 'consistent' }],
+        errors: [{ messageId: 'expectedConsistent' }],
+      },
+      // signatureTooLong:2 参 + outer call + maxLength + 单行
+      {
+        code: "server.post('/p', function (longArg1, longArg2) {})",
+        output: "server.post('/p', function (\n  longArg1,\n  longArg2\n) {})",
+        options: [{ maxLength: 10 }],
+        errors: [{ messageId: 'signatureTooLong' }],
+      },
+      // arrow 2 参 + outer call + style: 'multiple' + 单行
+      {
+        code: "server.post('/p', (a, b) => a + b)",
+        output: "server.post('/p', (\n  a,\n  b\n) => a + b)",
+        options: [{ style: 'multiple' }],
+        errors: [{ messageId: 'expectedMultipleLines' }],
+      },
+      // TS 类型注解 + outer call + style: 'multiple' + 单行
+      {
+        code: "server.post('/p', function (a: number, b: string) {})",
+        output: "server.post('/p', function (\n  a: number,\n  b: string\n) {})",
+        options: [{ style: 'multiple' }],
+        errors: [{ messageId: 'expectedMultipleLines' }],
+      },
+      // 3 参 + outer call + style: 'multiple' + 单行
+      {
+        code: "server.post('/p', function (a, b, c) {})",
+        output: "server.post('/p', function (\n  a,\n  b,\n  c\n) {})",
+        options: [{ style: 'multiple' }],
+        errors: [{ messageId: 'expectedMultipleLines' }],
+      },
+      // 深度 nested:server.post → server.foo → function
+      {
+        code: "server.post('/p', server.foo(function (a, b) {}))",
+        output: "server.post('/p', server.foo(function (\n  a,\n  b\n) {}))",
+        options: [{ style: 'multiple' }],
+        errors: [{ messageId: 'expectedMultipleLines' }],
+      },
+      // unsafe:2 参 + outer call + 参数之间有注释 + style: 'multiple'
+      // (验证 unsafe 护栏在嵌套场景下也工作)
+      {
+        code: "server.post('/p', function (a, /* x */ b) {})",
+        output: null,
+        options: [{ style: 'multiple' }],
+        errors: [{ messageId: 'expectedMultipleLines' }],
       },
     ],
   })

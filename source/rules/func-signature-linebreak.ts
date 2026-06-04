@@ -52,19 +52,36 @@ interface SignatureRange {
  *
  * - 有参数:`(` 是 `params[0]` 前的 token,`)` 是 `params[last]` 后的 token
  * - 无参数:从 `node` 自身的最后一个非 `(`/`)` token 之后,找 `(` / `)`
+ *
+ * **深度防御**:所有 token 查找都加 `t.range ⊆ node.range` 限制,确保不会跨越
+ * 节点边界(避免 nested 场景误把外层 call 的 `(`/`)` 当作本节点的签名括号)。
+ * 实际触发案例:`async request => {...}` 是 1 参无括号箭头,嵌在 `server.post('...', cb)` 里,
+ * `getTokenBefore(request, t => t.value === '(')` 会拿到外层 `.post(` 的 `(`。
+ * (虽然主流程 1 参已早返回不报,这里加范围限制是双重保险。)
  */
 function getOpenCloseParen(
   sourceCode: SourceCode,
   node: FunctionLike,
 ): { openParen: AST.Token; closeParen: AST.Token } | null {
+  const nodeStart = node.range[0]
+  const nodeEnd = node.range[1]
+  const inNode = (t: AST.Token, side: 'open' | 'close'): boolean =>
+    side === 'open' ? t.range[0] >= nodeStart : t.range[1] <= nodeEnd
+
   const params = node.params
   if (params.length > 0) {
     // ESLint 的 getTokenBefore/After 要 estree `Node | Token`;
     // TSESTree.Parameter 在运行时是同一对象,这里 cast 一下
     const first = params[0]! as unknown as Rule.Node
     const last = params[params.length - 1]! as unknown as Rule.Node
-    const openParen = sourceCode.getTokenBefore(first, (t) => t.value === '(') as AST.Token | null
-    const closeParen = sourceCode.getTokenAfter(last, (t) => t.value === ')') as AST.Token | null
+    const openParen = sourceCode.getTokenBefore(
+      first,
+      (t) => t.value === '(' && inNode(t, 'open'),
+    ) as AST.Token | null
+    const closeParen = sourceCode.getTokenAfter(
+      last,
+      (t) => t.value === ')' && inNode(t, 'close'),
+    ) as AST.Token | null
     if (!openParen || !closeParen) return null
     return { openParen, closeParen }
   }
@@ -72,9 +89,15 @@ function getOpenCloseParen(
   // 0 参:从 `node` 自身的最后一个非 `(`/`)` token 之后找
   const anchor = sourceCode.getLastToken(node as unknown as Rule.Node, (t) => t.value !== '(' && t.value !== ')')
   if (!anchor) return null
-  const openParen = sourceCode.getTokenAfter(anchor, (t) => t.value === '(') as AST.Token | null
+  const openParen = sourceCode.getTokenAfter(
+    anchor,
+    (t) => t.value === '(' && inNode(t, 'open'),
+  ) as AST.Token | null
   if (!openParen) return null
-  const closeParen = sourceCode.getTokenAfter(openParen, (t) => t.value === ')') as AST.Token | null
+  const closeParen = sourceCode.getTokenAfter(
+    openParen,
+    (t) => t.value === ')' && inNode(t, 'close'),
+  ) as AST.Token | null
   if (!closeParen) return null
   return { openParen, closeParen }
 }
@@ -261,19 +284,12 @@ const rule: Rule.RuleModule = {
       // 早返回前:把 sig 拷到 closure-local const,避免 TS 在回调里丢掉 narrowing
       const sigRef = sig
 
-      // 没有参数或只有一个参数:不需要"每参独占一行"讨论
-      if (params.length < 2) {
-        // 0 参的 `style: 'single'` 多行形态:`function foo(\n) {}` 也算违规
-        if (style === 'single' && !sig.isSingleLine) {
-          context.report({
-            node,
-            loc: reportLoc,
-            messageId: 'expectedSingleLine',
-            fix: (fixer) => buildFix(fixer, sigRef, params, 'expectedSingleLine'),
-          })
-        }
-        return
-      }
+      // 0 参 / 1 参:签名内层基本无可"换行风格"可言,直接放行。
+      // 0 参的 `function foo(\n) {}` 几乎不存在(`@typescript-eslint/parser` 严格时也拒绝),
+      // 1 参无括号箭头 `request =>` 是常见用法(Fastify/async 包装),
+      //   强检会误把外层 call 的 `(`/`)` 当作签名括号,破坏代码 —— 见测试 case
+      //   "嵌套箭头函数在外层 call 内:fix 不应误伤外层"。
+      if (params.length < 2) return
 
       // 内层有"非参数注释":只 report,不 fix
       const unsafeComments = hasInnerRangeComments(
