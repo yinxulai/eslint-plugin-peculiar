@@ -12,6 +12,12 @@ import pkg from '../package.json'
  */
 const FORCE_SINGLE_LINE = { style: 'single' } as const
 
+/**
+ * 推荐预设里的 `param-destructuring` 选项 —— 仅允许箭头函数解构。
+ * function / method 上的解构仍被禁止;4 个 config 共用。
+ */
+const ALLOW_ARROW_DESTRUCTURING = { allowIn: ['arrow'] } as const
+
 const plugin = {
   meta: {
     name: pkg.name,
@@ -34,14 +40,15 @@ const plugin = {
  * 三条规则的取向：
  * - `func-definition`     → 都允许（不传 `allow` = 4 种函数定义全开）
  * - `signature-linebreak` → 不允许换行（`{ style: 'single' }`，强制签名单行）
- * - `param-destructuring` → 不允许参数解构（不传 `allowIn` = 全部禁用）
+ * - `param-destructuring` → 仅允许箭头函数解构（`{ allowIn: ['arrow'] }`，
+ *                            function / method 上的解构仍被禁止）
  */
 const recommended = {
   plugins: ['@yinxulai/peculiar'],
   rules: {
     '@yinxulai/peculiar/func-definition': ['warn'],
     '@yinxulai/peculiar/signature-linebreak': ['warn', FORCE_SINGLE_LINE],
-    '@yinxulai/peculiar/param-destructuring': ['warn'],
+    '@yinxulai/peculiar/param-destructuring': ['warn', ALLOW_ARROW_DESTRUCTURING],
   },
 } as const
 
@@ -57,7 +64,7 @@ const strict = {
   rules: {
     '@yinxulai/peculiar/func-definition': ['error'],
     '@yinxulai/peculiar/signature-linebreak': ['error', FORCE_SINGLE_LINE],
-    '@yinxulai/peculiar/param-destructuring': ['error'],
+    '@yinxulai/peculiar/param-destructuring': ['error', ALLOW_ARROW_DESTRUCTURING],
   },
 } as const
 
@@ -81,7 +88,7 @@ const flatRecommended = [
     rules: {
       'peculiar/func-definition': ['warn'],
       'peculiar/signature-linebreak': ['warn', FORCE_SINGLE_LINE],
-      'peculiar/param-destructuring': ['warn'],
+      'peculiar/param-destructuring': ['warn', ALLOW_ARROW_DESTRUCTURING],
     },
   },
 ] as const
@@ -95,7 +102,7 @@ const flatStrict = [
     rules: {
       'peculiar/func-definition': ['error'],
       'peculiar/signature-linebreak': ['error', FORCE_SINGLE_LINE],
-      'peculiar/param-destructuring': ['error'],
+      'peculiar/param-destructuring': ['error', ALLOW_ARROW_DESTRUCTURING],
     },
   },
 ] as const
@@ -103,9 +110,9 @@ const flatStrict = [
 export = {
   ...plugin,
   configs: {
-    recommended,
     strict,
-    'flat/recommended': flatRecommended,
+    recommended,
     'flat/strict': flatStrict,
+    'flat/recommended': flatRecommended,
   },
 } as const

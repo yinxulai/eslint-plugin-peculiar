@@ -80,7 +80,7 @@ export default [
 | --- | --- |
 | `func-definition` | 都允许（不传 `allow` = 4 种函数定义全开） |
 | `signature-linebreak` | 不允许换行（`{ style: 'single' }`，强制签名单行） |
-| `param-destructuring` | 不允许参数解构（不传 `allowIn` = 全部禁用） |
+| `param-destructuring` | 仅允许箭头函数解构（`{ allowIn: ['arrow'] }`，function / method 仍禁用） |
 
 ---
 
