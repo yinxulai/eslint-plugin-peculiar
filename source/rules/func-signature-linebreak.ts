@@ -10,11 +10,15 @@ type Options = [
      * - `single`     : 签名必须在一行内
      * - `multiple`   : 签名必须多行,且每个参数独占一行
      * - `consistent` : 签名要么全在一行,要么多行且每个参数独占一行
+     *
+     * @default 'consistent'
      */
     style?: SignatureStyle
     /**
-     * 当一行签名字符数超过该值时,强制按 `multiple` 风格处理(每个参数独占一行)。
+     * 当 `(...)` 内部的字符数超过该值时,强制按 `multiple` 风格处理(每个参数独占一行)。
      * 仅在 `style: 'consistent'` 或 `style: 'single'` 时生效(用于检测单行过长)。
+     *
+     * 注意:计的是 `(...)` **内部**的字符数(不含 `(` `)` 本身),含注释。
      */
     maxLength?: number
   },
@@ -28,63 +32,113 @@ type MessageIds =
   | 'signatureTooLong'
 
 const DEFAULT_STYLE: SignatureStyle = 'consistent'
+const SINGLE_LINE_INDENT = '  '
+
+type FunctionLike =
+  | TSESTree.FunctionDeclaration
+  | TSESTree.FunctionExpression
+  | TSESTree.ArrowFunctionExpression
 
 interface SignatureRange {
-  openParen: AST.Token | null
-  closeParen: AST.Token | null
-  text: string
+  openParen: AST.Token
+  closeParen: AST.Token
+  innerText: string
   isSingleLine: boolean
   eachParamOnOwnLine: boolean
-  lines: number
 }
 
-function getParamTokens(
+/**
+ * 在 `node` 的参数列表外侧找到 `(` 和 `)` token。
+ *
+ * - 有参数:`(` 是 `params[0]` 前的 token,`)` 是 `params[last]` 后的 token
+ * - 无参数:从 `node` 自身的最后一个非 `(`/`)` token 之后,找 `(` / `)`
+ */
+function getOpenCloseParen(
   sourceCode: SourceCode,
-  params: { loc: { start: { line: number } } }[],
-): { openParen: AST.Token | null; closeParen: AST.Token | null } {
-  if (params.length === 0) {
-    // 没有参数时,需要找到 `()` 这个空括号对
-    // 通过父节点的位置推断:取父节点后第一个 `(` 和与之匹配的 `)`
-    // 这里为了简洁,直接返回 null 让上层跳过
-    return { openParen: null, closeParen: null }
+  node: FunctionLike,
+): { openParen: AST.Token; closeParen: AST.Token } | null {
+  const params = node.params
+  if (params.length > 0) {
+    // ESLint 的 getTokenBefore/After 要 estree `Node | Token`;
+    // TSESTree.Parameter 在运行时是同一对象,这里 cast 一下
+    const first = params[0]! as unknown as Rule.Node
+    const last = params[params.length - 1]! as unknown as Rule.Node
+    const openParen = sourceCode.getTokenBefore(first, (t) => t.value === '(') as AST.Token | null
+    const closeParen = sourceCode.getTokenAfter(last, (t) => t.value === ')') as AST.Token | null
+    if (!openParen || !closeParen) return null
+    return { openParen, closeParen }
   }
-  const first = params[0]! as unknown as Rule.Node
-  const last = params[params.length - 1]! as unknown as Rule.Node
-  const openParen = sourceCode.getTokenBefore(first, (t) => t.value === '(') as AST.Token | null
-  const closeParen = sourceCode.getTokenAfter(last, (t) => t.value === ')') as AST.Token | null
+
+  // 0 参:从 `node` 自身的最后一个非 `(`/`)` token 之后找
+  const anchor = sourceCode.getLastToken(node as unknown as Rule.Node, (t) => t.value !== '(' && t.value !== ')')
+  if (!anchor) return null
+  const openParen = sourceCode.getTokenAfter(anchor, (t) => t.value === '(') as AST.Token | null
+  if (!openParen) return null
+  const closeParen = sourceCode.getTokenAfter(openParen, (t) => t.value === ')') as AST.Token | null
+  if (!closeParen) return null
   return { openParen, closeParen }
 }
 
 function computeSignatureRange(
   sourceCode: SourceCode,
-  node: { params: { loc: { start: { line: number }; end: { line: number } } }[] },
+  node: FunctionLike,
 ): SignatureRange | null {
-  const { openParen, closeParen } = getParamTokens(sourceCode, node.params)
-  if (!openParen || !closeParen) return null
+  const tokens = getOpenCloseParen(sourceCode, node)
+  if (!tokens) return null
+  const { openParen, closeParen } = tokens
 
-  const text = sourceCode.text.slice(openParen.range[0], closeParen.range[1])
-  const lines = closeParen.loc.end.line - openParen.loc.start.line + 1
-  const isSingleLine = !text.includes('\n')
+  const innerText = sourceCode.text.slice(openParen.range[1], closeParen.range[0])
+  // 用 token 行号判断:openParen 结束行 !== closeParen 开始行 => 签名多行
+  // 不被 `text.includes('\n')` 干扰(块注释里的换行不会让"逻辑单行"误判为多行)
+  const isSingleLine = openParen.loc.end.line === closeParen.loc.start.line
 
-  // 每个参数独占一行:相邻参数的起始行号不同
+  // 每个参数独占一行:相邻参数不在同一行
+  const params = node.params
   let eachParamOnOwnLine = true
-  for (let i = 1; i < node.params.length; i++) {
-    const prevEnd = node.params[i - 1]!.loc.end.line
-    const curStart = node.params[i]!.loc.start.line
-    if (curStart === prevEnd) {
+  for (let i = 1; i < params.length; i++) {
+    const prevEndLine = params[i - 1]!.loc.end.line
+    const curStartLine = params[i]!.loc.start.line
+    if (curStartLine === prevEndLine) {
       eachParamOnOwnLine = false
       break
     }
   }
 
-  return {
-    openParen,
-    closeParen,
-    text,
-    isSingleLine,
-    eachParamOnOwnLine,
-    lines,
+  return { openParen, closeParen, innerText, isSingleLine, eachParamOnOwnLine }
+}
+
+/**
+ * innerRange 内部是否有"参数之外"的注释。
+ *
+ * 注释如果出现在 `(` 和 `)` 之间、但又**不在**参数节点自身范围内,fix 重建参数
+ * 列表时容易把它吞掉。遇到这种情况,只 report、不 fix —— 让用户自己手摆。
+ *
+ * 实现:遍历 `sourceCode.getAllComments()`,挑出完全在 `[openParen.end, closeParen.start)`
+ * 内的注释,再排除"落在某个 param 节点自身范围内"的(TS 类型注解内的注释,fix 安全)。
+ * 这样能同时覆盖:
+ *   - 第一个参数前的注释:        `function foo(<注释> a, b)`
+ *   - 最后一个参数后的注释:       `function foo(a, b, <注释>)`
+ *   - 相邻参数之间的注释:         `function foo(a, <注释> b)`
+ *   - 0 参时 innerRange 内的注释:  `function foo(<注释>)`
+ */
+function hasInnerRangeComments(
+  sourceCode: SourceCode,
+  openParen: AST.Token,
+  closeParen: AST.Token,
+  params: TSESTree.Parameter[],
+): boolean {
+  const innerStart = openParen.range[1]
+  const innerEnd = closeParen.range[0]
+  for (const c of sourceCode.getAllComments()) {
+    const r = c.range
+    if (!r) continue
+    if (r[0] < innerStart || r[1] > innerEnd) continue
+    const inParam = params.some(
+      (p) => r[0] >= p.range[0] && r[1] <= p.range[1],
+    )
+    if (!inParam) return true
   }
+  return false
 }
 
 const rule: Rule.RuleModule = {
@@ -94,6 +148,8 @@ const rule: Rule.RuleModule = {
     docs: {
       description:
         'Enforce a consistent line break style for function signatures.',
+      recommended: false,
+      url: 'https://github.com/yinxulai/eslint-plugin-peculiar#func-signature-linebreak',
     },
     schema: [
       {
@@ -130,71 +186,53 @@ const rule: Rule.RuleModule = {
     const maxLength = options.maxLength
     const sourceCode = context.sourceCode
 
-    function reportLoc(sig: SignatureRange) {
-      return {
-        start: sig.openParen!.loc.start,
-        end: sig.closeParen!.loc.end,
-      }
-    }
-
     /**
      * 构造 fix。不可机械修复时返回 null(让 ESLint 跳过 fix,但仍保留 report)。
      *
      * 修复策略按 messageId 分类:
-     * | messageId              | 输入            | 修复方向               |
-     * | ---------------------- | --------------- | ---------------------- |
-     * | expectedSingleLine     | 多行            | 把 `()` 内全部空白压成单空格 |
+     * | messageId              | 输入             | 修复方向               |
+     * | ---------------------- | ---------------- | ---------------------- |
+     * | expectedSingleLine     | 多行             | 把 `()` 内全部空白压成单空格 |
      * | paramShouldBeOnOwnLine | 多行(参数未分行) | 每个参数独占一行       |
-     * | expectedConsistent     | 同上            | 同上                   |
-     * | expectedMultipleLines  | 单行            | 拆成"每个参数独占一行" |
-     * | signatureTooLong       | 单行(过长)      | 同上                   |
+     * | expectedConsistent     | 多行(参数未分行) | 同上                   |
+     * | expectedMultipleLines  | 单行             | 拆成"每个参数独占一行" |
+     * | signatureTooLong       | 单行(过长)       | 同上                   |
      *
      * 缩进策略:
-     * - 多行输入:用第一个参数所在的列号作参数缩进(沿用源码已有缩进),`)` 留在原位不动
-     * - 单行输入:用 2 空格(项目里用 4 空格 / tab 的可改 SINGLE_LINE_INDENT)
+     * - 多行输入:用第一个参数所在的列号作参数缩进(沿用源码已有缩进)
+     * - 单行输入:用 2 空格
+     *
+     * 安全护栏:innerRange 内有"参数外注释"时,返回 null(只 report 不 fix)。
      */
-    const SINGLE_LINE_INDENT = '  '
-
-    type FixableFunctionLike =
-      | TSESTree.FunctionDeclaration
-      | TSESTree.FunctionExpression
-      | TSESTree.ArrowFunctionExpression
-
     function buildFix(
       fixer: Rule.RuleFixer,
-      sc: SourceCode,
-      node: FixableFunctionLike,
       sig: SignatureRange,
+      params: TSESTree.Parameter[],
       messageId: MessageIds,
     ): Rule.Fix | null {
-      const openParen = sig.openParen
-      const closeParen = sig.closeParen
-      if (!openParen || !closeParen) return null
-      const params = node.params
-      if (params.length < 2) return null
-
-      // 替换区间:紧贴 () 内部,不动 `(` 和 `)` —— 这样 `)` 保持在原位
-      const innerRange: [number, number] = [
-        openParen.range[1],
-        closeParen.range[0],
-      ]
+      const { openParen, closeParen, innerText, isSingleLine } = sig
+      const innerRange: [number, number] = [openParen.range[1], closeParen.range[0]]
 
       // Case 1: 多行 → 单行
       if (messageId === 'expectedSingleLine') {
-        const innerText = sc.text.slice(innerRange[0], innerRange[1])
+        // 把内层全部空白压成单空格(块注释内部的空白不动,因为它们不是连续空白)
         const collapsed = innerText.replace(/\s+/g, ' ').trim()
         return fixer.replaceTextRange(innerRange, collapsed)
       }
 
       // 其余 4 个:拆成"每个参数独占一行"
-      const isMultilineInput = !sig.isSingleLine
-      const paramIndent = isMultilineInput
-        ? ' '.repeat(params[0]!.loc.start.column)
-        : SINGLE_LINE_INDENT
+      if (params.length < 2) return null
+      if (hasInnerRangeComments(sourceCode, openParen, closeParen, params)) {
+        return null
+      }
+
+      const paramIndent = isSingleLine
+        ? SINGLE_LINE_INDENT
+        : ' '.repeat(params[0]!.loc.start.column)
       const newInner =
         '\n' +
         params
-          .map((p) => paramIndent + sc.text.slice(p.range[0], p.range[1]))
+          .map((p) => paramIndent + sourceCode.text.slice(p.range[0], p.range[1]))
           .join(',\n') +
         '\n'
 
@@ -209,13 +247,41 @@ const rule: Rule.RuleModule = {
       ) {
         return
       }
-      const fnNode = node as unknown as FixableFunctionLike
+      const fnNode = node as unknown as FunctionLike
       const params = fnNode.params
-      // 没有参数或只有一个参数:不需要换行讨论
-      if (params.length < 2) return
 
-      const sig = computeSignatureRange(sourceCode, { params })
+      const sig = computeSignatureRange(sourceCode, fnNode)
       if (!sig) return
+
+      const reportLoc = {
+        start: sig.openParen.loc.start,
+        end: sig.closeParen.loc.end,
+      }
+
+      // 早返回前:把 sig 拷到 closure-local const,避免 TS 在回调里丢掉 narrowing
+      const sigRef = sig
+
+      // 没有参数或只有一个参数:不需要"每参独占一行"讨论
+      if (params.length < 2) {
+        // 0 参的 `style: 'single'` 多行形态:`function foo(\n) {}` 也算违规
+        if (style === 'single' && !sig.isSingleLine) {
+          context.report({
+            node,
+            loc: reportLoc,
+            messageId: 'expectedSingleLine',
+            fix: (fixer) => buildFix(fixer, sigRef, params, 'expectedSingleLine'),
+          })
+        }
+        return
+      }
+
+      // 内层有"非参数注释":只 report,不 fix
+      const unsafeComments = hasInnerRangeComments(
+        sourceCode,
+        sig.openParen,
+        sig.closeParen,
+        params,
+      )
 
       function reportFixable(
         messageId: MessageIds,
@@ -223,30 +289,26 @@ const rule: Rule.RuleModule = {
       ) {
         context.report({
           node,
-          loc: reportLoc(sig!),
+          loc: reportLoc,
           messageId,
           data,
-          fix: (fixer) => buildFix(fixer, sourceCode, fnNode, sig!, messageId),
+          fix: unsafeComments
+            ? undefined
+            : (fixer) => buildFix(fixer, sigRef, params, messageId),
         })
       }
 
       // 长度超限:要求拆成多行
-      if (
-        maxLength !== undefined &&
-        sig.isSingleLine &&
-        sig.text.length > maxLength
-      ) {
+      if (maxLength !== undefined && sig.isSingleLine && sig.innerText.length > maxLength) {
         reportFixable('signatureTooLong', {
-          length: String(sig.text.length),
+          length: String(sig.innerText.length),
           max: String(maxLength),
         })
         return
       }
 
       if (style === 'single') {
-        if (!sig.isSingleLine) {
-          reportFixable('expectedSingleLine')
-        }
+        if (!sig.isSingleLine) reportFixable('expectedSingleLine')
         return
       }
 

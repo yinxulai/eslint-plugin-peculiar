@@ -6,4 +6,4 @@ lib/
 .idea/
 coverage/
 dist/
-output
+output/

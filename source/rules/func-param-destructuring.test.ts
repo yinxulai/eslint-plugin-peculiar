@@ -144,6 +144,68 @@ describe('func-param-destructuring', () => {
         options: [{ allowIn: ['unknown'] as never }],
         errors: [{ messageId: 'invalidAllowInOption' }],
       },
+
+      // ---- 箭头函数 block 体(可 fix,与表达式体对比) ----
+      {
+        code: 'const f = ({ a, b }) => { return a + b }',
+        output: 'const f = (arg0) => {const { a, b } = arg0;\n return a + b }',
+        errors: [{ messageId: 'paramDestructuring' }],
+      },
+
+      // ---- `this` 形参:报错但不带 fix(TS 表示成 name === 'this' 的 Identifier)----
+      {
+        code: 'function foo(this, { a, b }) {}',
+        output: null,
+        errors: [{ messageId: 'paramDestructuring' }],
+      },
+      {
+        code: 'function foo(this: SomeCtx, { a, b }: Props) {}',
+        output: null,
+        errors: [{ messageId: 'paramDestructuring' }],
+      },
+
+      // ---- 解构形参带默认值:报错但不带 fix(避免把默认值从 Pattern 上剥到 Identifier)----
+      {
+        code: 'function foo({ a, b } = {}) {}',
+        output: null,
+        errors: [{ messageId: 'paramDestructuring' }],
+      },
+      {
+        code: 'function foo([a, b] = [1, 2]) {}',
+        output: null,
+        errors: [{ messageId: 'paramDestructuring' }],
+      },
+      {
+        code: 'function foo(a, { b } = { b: 1 }) {}',
+        output: null,
+        errors: [{ messageId: 'paramDestructuring' }],
+      },
+
+      // ---- 非空函数体也能 fix(const 插入到 `{` 之后)----
+      {
+        code: 'function foo({ a, b }) { return a + b }',
+        output: 'function foo(arg0) {const { a, b } = arg0;\n return a + b }',
+        errors: [{ messageId: 'paramDestructuring' }],
+      },
+
+      // ---- rest 参数:fix 时按 range 切片保留 ----
+      {
+        code: 'function foo({ a }, ...rest) {}',
+        output: 'function foo(arg0, ...rest) {const { a } = arg0;\n}',
+        errors: [{ messageId: 'paramDestructuring' }],
+      },
+      {
+        code: 'function foo(a, { b }, ...rest) {}',
+        output: 'function foo(a, arg0, ...rest) {const { b } = arg0;\n}',
+        errors: [{ messageId: 'paramDestructuring' }],
+      },
+
+      // ---- FunctionExpression(赋值右侧的 function)也走 fix ----
+      {
+        code: 'const f = function ({ a, b }) { return a + b }',
+        output: 'const f = function (arg0) {const { a, b } = arg0;\n return a + b }',
+        errors: [{ messageId: 'paramDestructuring' }],
+      },
     ],
   })
 })

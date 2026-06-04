@@ -13,6 +13,7 @@ type Options = [
      * - 数组:仅允许数组中列出的种类
      * - 留空(默认):全部允许
      *
+     * @default undefined (= 全开)
      * @example ['arrow', 'method']
      */
     allow?: FunctionKind[]
@@ -26,6 +27,8 @@ const rule: Rule.RuleModule = {
     type: 'suggestion',
     docs: {
       description: 'Configure which kinds of function definitions are allowed.',
+      recommended: false,
+      url: 'https://github.com/yinxulai/eslint-plugin-peculiar#func-definition',
     },
     schema: [
       {
@@ -97,33 +100,26 @@ const rule: Rule.RuleModule = {
 
     return {
       // 顶层声明 - FunctionDeclaration
-      FunctionDeclaration(node: Rule.Node) {
-        if (node.type !== AST_NODE_TYPES.FunctionDeclaration) return
+      FunctionDeclaration(node) {
         if (!isAllowed('declaration')) report(node, 'declaration')
       },
 
-      // 顶层声明 - TSDeclareFunction
-      // 注意:`TSDeclareFunction` 是 @typescript-eslint 独有的 estree 扩展,
-      // ESLint v9 内置的 `Rule.Node['type']` 联合里没有它,所以这里直接信任 selector。
-      TSDeclareFunction(node: Rule.Node) {
-        if (!isAllowed('declaration')) report(node, 'declaration')
+      // TS 声明函数 (`TSDeclareFunction` 是 @typescript-eslint 扩展的 estree 节点,
+      // ESLint `RuleListener` 联合里没有它,只能用字符串 key,所以 node 显式标注)
+      'TSDeclareFunction'(node: { type: AST_NODE_TYPES.TSDeclareFunction; range: [number, number]; loc: Rule.Node['loc'] }) {
+        if (!isAllowed('declaration')) report(node as unknown as Rule.Node, 'declaration')
       },
 
       // 箭头函数
-      ArrowFunctionExpression(node: Rule.Node) {
-        if (node.type !== AST_NODE_TYPES.ArrowFunctionExpression) return
+      ArrowFunctionExpression(node) {
         if (!isAllowed('arrow')) report(node, 'arrow')
       },
 
       // 函数表达式 / 方法的内部函数
-      FunctionExpression(node: Rule.Node) {
-        if (node.type !== AST_NODE_TYPES.FunctionExpression) return
-        // 如果父节点是 MethodDefinition,按"方法"分类
-        if (isInsideMethod(node as never)) {
-          if (!isAllowed('method')) report(node, 'method')
-        } else {
-          if (!isAllowed('expression')) report(node, 'expression')
-        }
+      FunctionExpression(node) {
+        // isInsideMethod 接结构化类型,estree 节点也有 .parent
+        const kind: FunctionKind = isInsideMethod(node) ? 'method' : 'expression'
+        if (!isAllowed(kind)) report(node, kind)
       },
     }
   },

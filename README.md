@@ -12,6 +12,8 @@
 
 ## 安装
 
+要求 **ESLint ≥ 8.40**(用到了 `context.sourceCode` 等较新的 API)。
+
 ```bash
 npm install --save-dev @yinxulai/eslint-plugin-peculiar eslint
 ```
@@ -82,6 +84,29 @@ export default [
 | `func-signature-linebreak` | 不允许换行（`{ style: 'single' }`，强制签名单行） |
 | `func-param-destructuring` | 仅允许箭头函数解构（`{ allowIn: ['arrow'] }`，function / method 仍禁用） |
 
+> `func-definition` 与 `func-param-destructuring` 的"默认方向"是**相反**的：
+> - `func-definition` 不传 `allow` = 4 种函数定义都允许
+> - `func-param-destructuring` 不传 `allowIn` = 全部禁止
+>
+> 原因：前者的目标是"白名单"(开箱即用),后者的目标是"黑名单"(更严的代码规范)。
+
+---
+
+## 覆盖范围
+
+所有规则都基于 **ESLint/ESTree 的函数节点** 触发，Visitor 访问以下节点类型：
+
+| 节点类型 | 覆盖说明 |
+| --- | --- |
+| `FunctionDeclaration`     | 顶层 `function foo() {}` 声明 |
+| `FunctionExpression`      | `const f = function () {}` 表达式，及 class/object 方法**内部**的函数 |
+| `ArrowFunctionExpression` | `const f = () => {}` 箭头函数 |
+| `TSDeclareFunction`       | `declare function foo(): void` TS 声明(仅 `func-definition` 视为 `declaration`) |
+
+**类与对象方法**:`class A { foo() {} }` 里的 `foo` 是 `FunctionExpression`,其 `.parent` 是 `MethodDefinition`,会被归类为 `method`。`const o = { foo() {} }` 里的 `foo` 同理(`.parent` 是 `Property`,且 `method === true`)。
+
+**嵌套函数**:Visitor 会**递归**访问嵌套函数,但分类时只看**直接父节点**(`isInsideMethod`)。
+
 ---
 
 ## 规则
@@ -107,6 +132,7 @@ export default [
 ```
 
 > 数组为空 = 全部禁用。
+> 数组含未知值(非 `declaration` / `expression` / `arrow` / `method`)会作为配置错误上报 `invalidAllowOption`,而不是 schema 报错。
 
 ---
 
@@ -120,7 +146,7 @@ export default [
 | `multiple`   | 签名必须多行，**每个参数独占一行** |
 | `consistent` | 签名要么全在一行，要么多行且每个参数独占一行（默认） |
 
-附加选项 `maxLength`：单行签名字符数超过该值时，必须改为多行（每个参数独占一行）。
+附加选项 `maxLength`：单行签名字符数超过该值时，必须改为多行（每个参数独占一行）。**计算的是 `(` 与 `)` 之间(不含括号本身)的字符数,含注释。** 显式写了 `style: 'single'` + `maxLength` 时,过长依然会触发 `signatureTooLong` 并自动修复为多行。
 
 ```jsonc
 // 强制单行(不允许换行)
@@ -134,6 +160,8 @@ export default [
 ```
 
 **不报错的场景**：参数 < 2 个（没东西可换行）。
+
+**fix 安全护栏**:自动修复仅在签名 `()` 内"无参数外注释"时生效。如果参数之间 / 之前 / 之后有内联块/行注释,fix 会**只 report 不 fix**(`output: null`),把决定权交给人工。
 
 ---
 
@@ -149,7 +177,7 @@ export default [
 | `arrow`    | 箭头函数 | `const foo = () => {}` |
 | `method`   | 类/对象方法 | `class A { foo() {} }` / `const o = { foo() {} }` |
 
-**默认**：全部不允许（不传该选项 = 全部禁用，与 `func-definition` 一致）。
+**默认**：全部不允许（不传该选项 = 全部禁用，与 `func-definition` 默认方向相反）。
 
 ```jsonc
 // 仅允许箭头函数解构
@@ -175,6 +203,13 @@ class A { method(coord) {} }
 > - 解构出来的属性是否被使用不在本规则范围，使用官方的 [`no-unused-vars`](https://eslint.org/docs/latest/rules/no-unused-vars)。
 > - 用途之一是绕过 [`max-params`](https://eslint.org/docs/latest/rules/max-params) 计数 —— `function f({a, b, c, d, e})` 在官方 `max-params` 里只算 1 个参数，启用本规则可强制显式书写。
 
+**fix 条件**:自动修复仅在"安全"场景下提供 —— 即:
+- 函数体是 `BlockStatement`(不是箭头表达式体)
+- 没有 `this` 形参(避免改写挪动其它形参索引)
+- 解构形参没有外层默认值(避免把默认值从 Pattern 上剥到 Identifier 上)
+
+不满足上述条件时仍会报 `paramDestructuring`,但不带 fix。
+
 ---
 
 ## 开发
@@ -182,7 +217,7 @@ class A { method(coord) {} }
 ```bash
 npm install
 npm run build         # tsc → output/ (test 文件不会进 output)
-npm test              # vitest 跑全部规则 + 插件结构测试
+npm test              # pretest (tsc --noEmit) + vitest 跑全部规则 + 插件结构测试
 npm run coverage      # 附带 v8 覆盖率报告
 ```
 
@@ -203,7 +238,7 @@ source/
     function-helpers.ts
 ```
 
-`tsc` 通过 `tsconfig.json` 的 `exclude: ["**/*.test.ts"]` 把测试文件挡在 `output/` 外，不会污染发布包。
+`tsc` 通过 `tsconfig.json` 的 `exclude: ["**/*.test.ts"]` 把测试文件挡在 `output/` 外，不会污染发布包。`npm test` 走 `pretest` hook 跑 `tsc --noEmit`,确保发布前类型已干净。
 
 ## 协议
 

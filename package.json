@@ -32,12 +32,13 @@
     "build": "tsc",
     "clean": "rm -rf output",
     "prepublishOnly": "npm run clean && npm run build",
+    "pretest": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage"
   },
   "peerDependencies": {
-    "eslint": ">=7.0.0"
+    "eslint": ">=8.40.0"
   },
   "devDependencies": {
     "@types/eslint": "^9.6.1",

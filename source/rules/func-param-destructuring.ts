@@ -1,4 +1,4 @@
-import type { Rule } from 'eslint'
+import type { Rule, SourceCode } from 'eslint'
 import { AST_NODE_TYPES, TSESTree } from '@typescript-eslint/utils'
 import { isInsideMethod } from '../utils/function-helpers'
 
@@ -8,12 +8,14 @@ type Options = [
   {
     /**
      * 允许参数解构的函数类型。
-     * - `function` → 顶层 function declaration / function expression
+     * - `function` → 顶层 function declaration / function expression(非方法上下文)
      * - `arrow`    → 箭头函数
-     * - `method`   → 类/对象方法
+     * - `method`   → 类/对象方法(通过内部 `FunctionExpression` 自动覆盖)
      *
-     * 显式传入空数组会作为配置错误上报(`invalidAllowInOption`),
-     * 不传该选项 = 全部不允许(与 `func-definition` 一致)。
+     * 显式传入空数组 / 含未知值会作为配置错误上报(`invalidAllowInOption`),
+     * 不传该选项 = 全部不允许(默认禁用)。
+     *
+     * @default undefined (= 全禁)
      */
     allowIn?: AllowedContext[]
   },
@@ -39,13 +41,15 @@ const rule: Rule.RuleModule = {
      * 仅在"安全"场景下提供 fix —— 即:
      * - 函数体是 BlockStatement(不是箭头表达式体)
      * - 没有 `this` 形参(避免改写挪动其它形参索引)
-     * - 解构形参没有外层默认值(避免把默认值从模式上剥到 Identifier 上)
+     * - 解构形参没有外层默认值(避免把默认值从 Pattern 上剥到 Identifier 上)
      *
      * 不满足上述条件时仍会报 `paramDestructuring`,但不带 fix。
      */
     fixable: 'code',
     docs: {
       description: 'Disallow destructuring patterns in function parameters.',
+      recommended: false,
+      url: 'https://github.com/yinxulai/eslint-plugin-peculiar#func-param-destructuring',
     },
     schema: [
       {
@@ -96,19 +100,15 @@ const rule: Rule.RuleModule = {
 
     const allowSet: Set<AllowedContext> = new Set(rawAllowIn ?? [])
 
-    function isAllowedContext(node: Rule.Node): boolean {
-      let kind: AllowedContext
-      if (node.type === AST_NODE_TYPES.ArrowFunctionExpression) {
-        kind = 'arrow'
-      } else if (node.type === AST_NODE_TYPES.FunctionDeclaration) {
-        kind = 'function'
-      } else if (node.type === AST_NODE_TYPES.FunctionExpression) {
-        // method = inside MethodDefinition / Property(method=true)
-        kind = isInsideMethod(node as never) ? 'method' : 'function'
-      } else {
-        return false
-      }
-      return allowSet.has(kind)
+    /**
+     * 将一个函数表达式归类到 `function` / `arrow` / `method` 之一;
+     * 不是这三种 → 返回 null(意味着 visitor 误调,理论上不会发生)。
+     */
+    function classify(node: FunctionLike): AllowedContext {
+      if (node.type === AST_NODE_TYPES.ArrowFunctionExpression) return 'arrow'
+      if (node.type === AST_NODE_TYPES.FunctionDeclaration) return 'function'
+      // FunctionExpression:method = inside MethodDefinition / Property(method=true)
+      return isInsideMethod(node) ? 'method' : 'function'
     }
 
     /**
@@ -117,8 +117,8 @@ const rule: Rule.RuleModule = {
      * 例:[a, b]            → patternText=`[a, b]`,  typeText=``
      */
     function getPatternInfo(
-      sc: Rule.RuleContext['sourceCode'],
-      pattern: TSESTree.ObjectPattern | TSESTree.ArrayPattern
+      sc: SourceCode,
+      pattern: TSESTree.ObjectPattern | TSESTree.ArrayPattern,
     ): { patternText: string; typeText: string } {
       const ta = (pattern as TSESTree.ObjectPattern).typeAnnotation
       if (ta) {
@@ -126,8 +126,7 @@ const rule: Rule.RuleModule = {
         const typeText = sc.text.slice(ta.range[0], ta.range[1])
         return { patternText, typeText }
       }
-      // 没有类型注解时,直接按 range 切片 —— 避开 sc.getText 对 TSESTree 节点
-      // 的递归类型不兼容问题
+      // 没有类型注解时,直接按 range 切片
       return {
         patternText: sc.text.slice(pattern.range[0], pattern.range[1]),
         typeText: '',
@@ -166,12 +165,11 @@ const rule: Rule.RuleModule = {
 
     function buildFix(
       fixer: Rule.RuleFixer,
-      sc: Rule.RuleContext['sourceCode'],
-      node: FunctionLike
+      sc: SourceCode,
+      node: FunctionLike,
     ): Rule.Fix[] {
       const params = node.params
       const body = node.body as TSESTree.BlockStatement
-      // 防御性:check() 只在 params 非空时才会调到这里,但 TS 推不出这一点
       if (params.length === 0) return []
 
       const newParamTexts: string[] = []
@@ -188,8 +186,7 @@ const rule: Rule.RuleModule = {
           newParamTexts.push(name + typeText)
           constStmts.push(`const ${patternText} = ${name}`)
         } else {
-          // 普通形参:直接按 range 切片,避开 sc.getText 对 TSESTree 节点的
-          // 递归类型不兼容问题
+          // 普通形参:直接按 range 切片
           newParamTexts.push(sc.text.slice(param.range[0], param.range[1]))
         }
       }
@@ -203,7 +200,7 @@ const rule: Rule.RuleModule = {
         fixer.replaceTextRange(paramsRange, newParamTexts.join(', ')),
         fixer.insertTextAfterRange(
           [body.range[0], body.range[0] + 1],
-          constStmts.join(';\n') + ';\n'
+          constStmts.join(';\n') + ';\n',
         ),
       ]
     }
@@ -216,9 +213,11 @@ const rule: Rule.RuleModule = {
       ) {
         return
       }
-      if (isAllowedContext(node)) return
+      const fnNode = node as unknown as FunctionLike
 
-      const fnNode = node as FunctionLike
+      // 默认全禁(allowIn 未传);非空 allowIn 时按 set 查
+      if (allowSet.has(classify(fnNode))) return
+
       const hasDestructuring = fnNode.params.some(
         (p) =>
           p.type === AST_NODE_TYPES.ObjectPattern ||
@@ -227,17 +226,17 @@ const rule: Rule.RuleModule = {
             ((p as TSESTree.AssignmentPattern).left.type ===
               AST_NODE_TYPES.ObjectPattern ||
               (p as TSESTree.AssignmentPattern).left.type ===
-                AST_NODE_TYPES.ArrayPattern))
+                AST_NODE_TYPES.ArrayPattern)),
       )
       if (!hasDestructuring) return
 
+      const fixable = isFixable(fnNode)
       context.report({
         node,
         messageId: 'paramDestructuring',
-        fix: (fixer) => {
-          if (!isFixable(fnNode)) return null
-          return buildFix(fixer, context.sourceCode, fnNode)
-        },
+        fix: fixable
+          ? (fixer) => buildFix(fixer, context.sourceCode, fnNode)
+          : undefined,
       })
     }
 
