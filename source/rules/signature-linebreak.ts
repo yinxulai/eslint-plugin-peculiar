@@ -1,5 +1,5 @@
 import type { Rule, SourceCode, AST } from 'eslint'
-import { AST_NODE_TYPES } from '@typescript-eslint/utils'
+import { AST_NODE_TYPES, TSESTree } from '@typescript-eslint/utils'
 
 type SignatureStyle = 'consistent' | 'single' | 'multiple'
 
@@ -90,6 +90,7 @@ function computeSignatureRange(
 const rule: Rule.RuleModule = {
   meta: {
     type: 'layout',
+    fixable: 'code',
     docs: {
       description:
         'Enforce a consistent line break style for function signatures.',
@@ -136,6 +137,70 @@ const rule: Rule.RuleModule = {
       }
     }
 
+    /**
+     * 构造 fix。不可机械修复时返回 null(让 ESLint 跳过 fix,但仍保留 report)。
+     *
+     * 修复策略按 messageId 分类:
+     * | messageId              | 输入            | 修复方向               |
+     * | ---------------------- | --------------- | ---------------------- |
+     * | expectedSingleLine     | 多行            | 把 `()` 内全部空白压成单空格 |
+     * | paramShouldBeOnOwnLine | 多行(参数未分行) | 每个参数独占一行       |
+     * | expectedConsistent     | 同上            | 同上                   |
+     * | expectedMultipleLines  | 单行            | 拆成"每个参数独占一行" |
+     * | signatureTooLong       | 单行(过长)      | 同上                   |
+     *
+     * 缩进策略:
+     * - 多行输入:用第一个参数所在的列号作参数缩进(沿用源码已有缩进),`)` 留在原位不动
+     * - 单行输入:用 2 空格(项目里用 4 空格 / tab 的可改 SINGLE_LINE_INDENT)
+     */
+    const SINGLE_LINE_INDENT = '  '
+
+    type FixableFunctionLike =
+      | TSESTree.FunctionDeclaration
+      | TSESTree.FunctionExpression
+      | TSESTree.ArrowFunctionExpression
+
+    function buildFix(
+      fixer: Rule.RuleFixer,
+      sc: SourceCode,
+      node: FixableFunctionLike,
+      sig: SignatureRange,
+      messageId: MessageIds,
+    ): Rule.Fix | null {
+      const openParen = sig.openParen
+      const closeParen = sig.closeParen
+      if (!openParen || !closeParen) return null
+      const params = node.params
+      if (params.length < 2) return null
+
+      // 替换区间:紧贴 () 内部,不动 `(` 和 `)` —— 这样 `)` 保持在原位
+      const innerRange: [number, number] = [
+        openParen.range[1],
+        closeParen.range[0],
+      ]
+
+      // Case 1: 多行 → 单行
+      if (messageId === 'expectedSingleLine') {
+        const innerText = sc.text.slice(innerRange[0], innerRange[1])
+        const collapsed = innerText.replace(/\s+/g, ' ').trim()
+        return fixer.replaceTextRange(innerRange, collapsed)
+      }
+
+      // 其余 4 个:拆成"每个参数独占一行"
+      const isMultilineInput = !sig.isSingleLine
+      const paramIndent = isMultilineInput
+        ? ' '.repeat(params[0]!.loc.start.column)
+        : SINGLE_LINE_INDENT
+      const newInner =
+        '\n' +
+        params
+          .map((p) => paramIndent + sc.text.slice(p.range[0], p.range[1]))
+          .join(',\n') +
+        '\n'
+
+      return fixer.replaceTextRange(innerRange, newInner)
+    }
+
     function check(node: Rule.Node): void {
       if (
         node.type !== AST_NODE_TYPES.FunctionDeclaration &&
@@ -144,68 +209,61 @@ const rule: Rule.RuleModule = {
       ) {
         return
       }
-      const params = (node as unknown as { params: { loc: { start: { line: number }; end: { line: number } } }[] }).params
+      const fnNode = node as unknown as FixableFunctionLike
+      const params = fnNode.params
       // 没有参数或只有一个参数:不需要换行讨论
       if (params.length < 2) return
 
       const sig = computeSignatureRange(sourceCode, { params })
       if (!sig) return
 
-      // 长度超限:要求必须是 multiple
+      function reportFixable(
+        messageId: MessageIds,
+        data?: Record<string, unknown>,
+      ) {
+        context.report({
+          node,
+          loc: reportLoc(sig!),
+          messageId,
+          data,
+          fix: (fixer) => buildFix(fixer, sourceCode, fnNode, sig!, messageId),
+        })
+      }
+
+      // 长度超限:要求拆成多行
       if (
         maxLength !== undefined &&
         sig.isSingleLine &&
         sig.text.length > maxLength
       ) {
-        context.report({
-          node,
-          loc: reportLoc(sig),
-          messageId: 'signatureTooLong',
-          data: {
-            length: String(sig.text.length),
-            max: String(maxLength),
-          },
+        reportFixable('signatureTooLong', {
+          length: String(sig.text.length),
+          max: String(maxLength),
         })
         return
       }
 
       if (style === 'single') {
         if (!sig.isSingleLine) {
-          context.report({
-            node,
-            loc: reportLoc(sig),
-            messageId: 'expectedSingleLine',
-          })
+          reportFixable('expectedSingleLine')
         }
         return
       }
 
       if (style === 'multiple') {
         if (sig.isSingleLine) {
-          context.report({
-            node,
-            loc: reportLoc(sig),
-            messageId: 'expectedMultipleLines',
-          })
+          reportFixable('expectedMultipleLines')
           return
         }
         if (!sig.eachParamOnOwnLine) {
-          context.report({
-            node,
-            loc: reportLoc(sig),
-            messageId: 'paramShouldBeOnOwnLine',
-          })
+          reportFixable('paramShouldBeOnOwnLine')
         }
         return
       }
 
       // style === 'consistent'
       if (!sig.isSingleLine && !sig.eachParamOnOwnLine) {
-        context.report({
-          node,
-          loc: reportLoc(sig),
-          messageId: 'expectedConsistent',
-        })
+        reportFixable('expectedConsistent')
       }
     }
 

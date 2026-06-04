@@ -42,84 +42,98 @@ describe('param-destructuring', () => {
       },
     ],
     invalid: [
-      // 默认:全禁
+      // ---- function declaration,带 fix ----
       {
         code: 'function foo({ a, b }) {}',
+        output: 'function foo(arg0) {const { a, b } = arg0;\n}',
         errors: [{ messageId: 'paramDestructuring' }],
       },
       {
-        code: 'const f = ({ a, b }) => a + b',
-        errors: [{ messageId: 'paramDestructuring' }],
-      },
-      {
-        code: 'class A { method({ a, b }) {} }',
-        errors: [{ messageId: 'paramDestructuring' }],
-      },
-      {
-        code: 'const obj = { method({ a, b }) {} }',
+        code: 'function foo([a, b]) {}',
+        output: 'function foo(arg0) {const [a, b] = arg0;\n}',
         errors: [{ messageId: 'paramDestructuring' }],
       },
 
-      // 数组解构
+      // ---- class method,带 fix ----
       {
-        code: 'function foo([a, b]) {}',
-        errors: [{ messageId: 'paramDestructuring' }],
-      },
-      {
-        code: 'const f = ([a, b]) => a',
+        code: 'class A { method({ a, b }) {} }',
+        output: 'class A { method(arg0) {const { a, b } = arg0;\n} }',
         errors: [{ messageId: 'paramDestructuring' }],
       },
       {
         code: 'class A { method([x, y]) {} }',
+        output: 'class A { method(arg0) {const [x, y] = arg0;\n} }',
         errors: [{ messageId: 'paramDestructuring' }],
       },
 
-      // TS 类型注解
+      // ---- object method shorthand,带 fix ----
+      {
+        code: 'const obj = { method({ a, b }) {} }',
+        output: 'const obj = { method(arg0) {const { a, b } = arg0;\n} }',
+        errors: [{ messageId: 'paramDestructuring' }],
+      },
+
+      // ---- TS 类型注解,带 fix ----
       {
         code: 'function foo({ a, b }: { a: number; b: number }) {}',
+        output:
+          'function foo(arg0: { a: number; b: number }) {const { a, b } = arg0;\n}',
         errors: [{ messageId: 'paramDestructuring' }],
       },
       {
         code: 'function foo([a, b]: number[]) {}',
+        output: 'function foo(arg0: number[]) {const [a, b] = arg0;\n}',
         errors: [{ messageId: 'paramDestructuring' }],
       },
 
-      // allowIn 只允许部分上下文
+      // ---- 箭头函数表达式体 —— 不带 fix(body 不是 BlockStatement) ----
+      {
+        code: 'const f = ({ a, b }) => a + b',
+        output: null,
+        errors: [{ messageId: 'paramDestructuring' }],
+      },
+      {
+        code: 'const f = ([a, b]) => a',
+        output: null,
+        errors: [{ messageId: 'paramDestructuring' }],
+      },
+
+      // ---- allowIn 只允许部分上下文 ----
       {
         code: 'function foo({ a }) {}',
         options: [{ allowIn: ['arrow'] }],
+        output: 'function foo(arg0) {const { a } = arg0;\n}',
         errors: [{ messageId: 'paramDestructuring' }],
       },
       {
         code: 'const f = ({ a }) => a',
         options: [{ allowIn: ['function'] }],
+        output: null,
         errors: [{ messageId: 'paramDestructuring' }],
       },
       {
         code: 'class A { method({ a }) {} }',
         options: [{ allowIn: ['function', 'arrow'] }],
+        output: 'class A { method(arg0) {const { a } = arg0;\n} }',
         errors: [{ messageId: 'paramDestructuring' }],
       },
 
-      // 一个函数里多个解构
+      // ---- 一个函数里多个解构,带 fix ----
       {
         code: 'function foo({ a }, { b }, [c]) {}',
-        errors: [
-          { messageId: 'paramDestructuring' },
-          { messageId: 'paramDestructuring' },
-          { messageId: 'paramDestructuring' },
-        ],
+        output:
+          'function foo(arg0, arg1, arg2) {const { a } = arg0;\nconst { b } = arg1;\nconst [c] = arg2;\n}',
+        errors: [{ messageId: 'paramDestructuring' }],
       },
-      // 解构 + 普通参数混用
+      // ---- 解构 + 普通参数混用,带 fix ----
       {
         code: 'function foo(a, { b }, c, [d]) {}',
-        errors: [
-          { messageId: 'paramDestructuring' },
-          { messageId: 'paramDestructuring' },
-        ],
+        output:
+          'function foo(a, arg0, c, arg1) {const { b } = arg0;\nconst [d] = arg1;\n}',
+        errors: [{ messageId: 'paramDestructuring' }],
       },
 
-      // 选项校验错误
+      // ---- 选项校验错误(不走 fix 路径) ----
       {
         code: 'function foo() {}',
         options: [{ allowIn: [] }],

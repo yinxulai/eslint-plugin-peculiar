@@ -49,11 +49,13 @@ describe('signature-linebreak', () => {
       // style: 'multiple' but single-line
       {
         code: 'function foo(a, b) {}',
+        output: 'function foo(\n  a,\n  b\n) {}',
         options: [{ style: 'multiple' }],
         errors: [{ messageId: 'expectedMultipleLines' }],
       },
       {
         code: 'const f = (a, b) => a + b',
+        output: 'const f = (\n  a,\n  b\n) => a + b',
         options: [{ style: 'multiple' }],
         errors: [{ messageId: 'expectedMultipleLines' }],
       },
@@ -61,6 +63,7 @@ describe('signature-linebreak', () => {
       // style: 'single' but multi-line
       {
         code: 'function foo(\n  a,\n  b\n) {}',
+        output: 'function foo(a, b) {}',
         options: [{ style: 'single' }],
         errors: [{ messageId: 'expectedSingleLine' }],
       },
@@ -68,6 +71,7 @@ describe('signature-linebreak', () => {
       // style: 'multiple' but not every param on own line
       {
         code: 'function foo(\n  a, b\n) {}',
+        output: 'function foo(\n  a,\n  b\n) {}',
         options: [{ style: 'multiple' }],
         errors: [{ messageId: 'paramShouldBeOnOwnLine' }],
       },
@@ -75,6 +79,7 @@ describe('signature-linebreak', () => {
       // style: 'consistent' but not consistent
       {
         code: 'function foo(\n  a, b\n) {}',
+        output: 'function foo(\n  a,\n  b\n) {}',
         options: [{ style: 'consistent' }],
         errors: [{ messageId: 'expectedConsistent' }],
       },
@@ -82,6 +87,7 @@ describe('signature-linebreak', () => {
       // maxLength
       {
         code: 'function foo(long1, long2, long3) {}',
+        output: 'function foo(\n  long1,\n  long2,\n  long3\n) {}',
         options: [{ maxLength: 10 }],
         errors: [{ messageId: 'signatureTooLong' }],
       },
