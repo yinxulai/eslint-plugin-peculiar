@@ -1,4 +1,4 @@
-name: Release
+name: Publish
 
 on:
   release:
@@ -8,6 +8,8 @@ jobs:
   publish:
     name: Publish to npm
     runs-on: ubuntu-latest
+    # OIDC Trusted Publishing 需要 id-token: write 权限,
+    # provenance 由 npm 在 OIDC 流程里自动生成,不再需要 --provenance 标志。
     permissions:
       contents: read
       id-token: write
@@ -41,7 +43,11 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Publish to npm
-        run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish to npm via OIDC
+        # OIDC 流程:
+        #   1. GitHub 颁发短期 OIDC token (id-token: write)
+        #   2. setup-node@v4 + registry-url 把 registry 写进 .npmrc
+        #   3. npm 检测到 OIDC 环境,自动用 OIDC token 认证
+        #   4. npmjs.com 校验 trusted publisher 配置后允许发布
+        # 因此: 不需要 NODE_AUTH_TOKEN, 不需要 --provenance (自动生成)
+        run: npm publish --access public
