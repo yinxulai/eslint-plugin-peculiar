@@ -1,0 +1,50 @@
+{
+  "name": "@yinxulai/eslint-plugin-peculiar",
+  "version": "1.0.0",
+  "description": "Peculiar ESLint plugin with custom function-related rules: definition allowance, signature linebreaks, and maximum parameter count.",
+  "homepage": "https://github.com/yinxulai/eslint-plugin-peculiar#readme",
+  "bugs": {
+    "url": "https://github.com/yinxulai/eslint-plugin-peculiar/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yinxulai/eslint-plugin-peculiar.git"
+  },
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "output/index.js",
+  "types": "output/index.d.ts",
+  "files": [
+    "output"
+  ],
+  "keywords": [
+    "eslint",
+    "eslint-plugin",
+    "eslintplugin",
+    "function",
+    "peculiar"
+  ],
+  "engines": {
+    "node": ">=16"
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf output",
+    "prepublishOnly": "npm run clean && npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "peerDependencies": {
+    "eslint": ">=7.0.0"
+  },
+  "devDependencies": {
+    "@types/eslint": "^9.6.1",
+    "@types/node": "^20.12.7",
+    "@typescript-eslint/parser": "^8.60.1",
+    "@typescript-eslint/utils": "^8.60.1",
+    "eslint": "^9.39.4",
+    "typescript": "^5.4.5",
+    "vitest": "^2.1.9"
+  }
+}
