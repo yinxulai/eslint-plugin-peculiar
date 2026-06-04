@@ -196,12 +196,41 @@ const rule: Rule.RuleModule = {
         params[params.length - 1]!.range[1],
       ]
 
+      // 使用 token API 来判断格式和获取缩进
+      // 使用 getTokenByRangeStart 通过 range 位置获取 token，避免类型转换
+      const openBrace = sc.getTokenByRangeStart(body.range[0])!
+      const closeBrace = sc.getTokenByRangeStart(body.range[1] - 1)!
+      const tokenAfterBrace = sc.getTokenAfter(openBrace)
+      
+      // 检查函数体是否为空 (开括号后面直接是闭括号)
+      const isEmpty = tokenAfterBrace?.value === '}'
+      
+      // 检查开括号和下一个 token 是否在同一行
+      const hasLineBreak = tokenAfterBrace 
+        ? openBrace.loc.end.line < tokenAfterBrace.loc.start.line
+        : false
+      
+      // 获取缩进：
+      // - 如果已有内容且有换行，使用第一个 token 的缩进（保持现有格式）
+      // - 否则不使用缩进（直接跟在开括号后）
+      const bodyIndent = hasLineBreak && !isEmpty && tokenAfterBrace
+        ? ' '.repeat(tokenAfterBrace.loc.start.column)
+        : '' // 单行函数体不使用缩进
+      
+      // 构建插入文本
+      let insertText = ''
+      
+      // 如果没有换行（单行函数体或空函数体），const 语句直接跟在开括号后
+      if (!hasLineBreak) {
+        insertText = constStmts.join(';\n') + ';\n'
+      } else {
+        // 已有换行，保持原有格式
+        insertText = bodyIndent + constStmts.join(';\n' + bodyIndent) + ';\n'
+      }
+
       return [
         fixer.replaceTextRange(paramsRange, newParamTexts.join(', ')),
-        fixer.insertTextAfterRange(
-          [body.range[0], body.range[0] + 1],
-          constStmts.join(';\n') + ';\n',
-        ),
+        fixer.insertTextAfter(openBrace, insertText),
       ]
     }
 

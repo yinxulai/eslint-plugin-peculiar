@@ -336,6 +336,33 @@ describe('func-signature-linebreak', () => {
         options: [{ style: 'multiple' }],
         errors: [{ messageId: 'expectedMultipleLines' }],
       },
+
+      // ---- 边界情况：单参数在 multiple 模式下不应报错（valid中已有，这里测试确保不触发） ----
+      // （此测试确保覆盖 params.length < 2 的分支）
+
+      // ---- 多参数+注释在参数后面（不会自动修复，因为有注释） ----
+      {
+        code: 'function foo(a, b /* comment */) {}',
+        output: null,
+        options: [{ style: 'multiple' }],
+        errors: [{ messageId: 'expectedMultipleLines' }],
+      },
+
+      // ---- TypeScript 带复杂类型注解 ----
+      {
+        code: 'function foo(a: { x: number; y: number }, b: string[]) {}',
+        output: 'function foo(\n  a: { x: number; y: number },\n  b: string[]\n) {}',
+        options: [{ style: 'multiple' }],
+        errors: [{ messageId: 'expectedMultipleLines' }],
+      },
+
+      // ---- 箭头函数 + 返回类型注解 ----
+      {
+        code: 'const f = (a: number, b: number): number => a + b',
+        output: 'const f = (\n  a: number,\n  b: number\n): number => a + b',
+        options: [{ style: 'multiple' }],
+        errors: [{ messageId: 'expectedMultipleLines' }],
+      },
     ],
   })
 })

@@ -206,6 +206,55 @@ describe('func-param-destructuring', () => {
         output: 'const f = function (arg0) {const { a, b } = arg0;\n return a + b }',
         errors: [{ messageId: 'paramDestructuring' }],
       },
+
+      // ---- 嵌套解构（nested destructuring）----
+      {
+        code: 'function foo({ a: { b } }) {}',
+        output: 'function foo(arg0) {const { a: { b } } = arg0;\n}',
+        errors: [{ messageId: 'paramDestructuring' }],
+      },
+
+      // ---- 带重命名的对象解构 ----
+      {
+        code: 'function foo({ a: newA, b: newB }) {}',
+        output: 'function foo(arg0) {const { a: newA, b: newB } = arg0;\n}',
+        errors: [{ messageId: 'paramDestructuring' }],
+      },
+
+      // ---- 数组解构带rest ----
+      {
+        code: 'function foo([a, ...rest]) {}',
+        output: 'function foo(arg0) {const [a, ...rest] = arg0;\n}',
+        errors: [{ messageId: 'paramDestructuring' }],
+      },
+
+      // ---- 对象解构带rest ----
+      {
+        code: 'function foo({ a, ...rest }) {}',
+        output: 'function foo(arg0) {const { a, ...rest } = arg0;\n}',
+        errors: [{ messageId: 'paramDestructuring' }],
+      },
+
+      // ---- 空数组解构 ----
+      {
+        code: 'function foo([]) {}',
+        output: 'function foo(arg0) {const [] = arg0;\n}',
+        errors: [{ messageId: 'paramDestructuring' }],
+      },
+
+      // ---- 空对象解构 ----
+      {
+        code: 'function foo({}) {}',
+        output: 'function foo(arg0) {const {} = arg0;\n}',
+        errors: [{ messageId: 'paramDestructuring' }],
+      },
+
+      // ---- 已有多行格式的函数体 ----
+      {
+        code: 'function foo({ a, b }) {\n  const c = 1\n  return a + b + c\n}',
+        output: 'function foo(arg0) {  const { a, b } = arg0;\n\n  const c = 1\n  return a + b + c\n}',
+        errors: [{ messageId: 'paramDestructuring' }],
+      },
     ],
   })
 })

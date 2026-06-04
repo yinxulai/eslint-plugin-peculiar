@@ -32,7 +32,6 @@ type MessageIds =
   | 'signatureTooLong'
 
 const DEFAULT_STYLE: SignatureStyle = 'consistent'
-const SINGLE_LINE_INDENT = '  '
 
 type FunctionLike =
   | TSESTree.FunctionDeclaration
@@ -249,8 +248,11 @@ const rule: Rule.RuleModule = {
         return null
       }
 
+      // 自动获取缩进：
+      // - 多行输入：使用第一个参数的列号（保持现有缩进）
+      // - 单行输入：使用固定的 2 空格（标准缩进，不随嵌套深度变化）
       const paramIndent = isSingleLine
-        ? SINGLE_LINE_INDENT
+        ? '  ' // 固定 2 空格，避免嵌套时缩进过多
         : ' '.repeat(params[0]!.loc.start.column)
       const newInner =
         '\n' +
