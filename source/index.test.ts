@@ -6,8 +6,8 @@ describe('plugin shape', () => {
   it('exports the three expected rules', () => {
     expect(Object.keys(plugin.rules).sort()).toEqual([
       'func-definition',
-      'param-destructuring',
-      'signature-linebreak',
+      'func-param-destructuring',
+      'func-signature-linebreak',
     ])
   })
 
@@ -94,8 +94,8 @@ describe('plugin shape', () => {
       const block = plugin.configs['flat/recommended'][0]!
       expect(Object.keys(block.rules).sort()).toEqual([
         'peculiar/func-definition',
-        'peculiar/param-destructuring',
-        'peculiar/signature-linebreak',
+        'peculiar/func-param-destructuring',
+        'peculiar/func-signature-linebreak',
       ])
     })
 

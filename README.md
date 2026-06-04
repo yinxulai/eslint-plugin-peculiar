@@ -5,8 +5,8 @@
 > 提供三个规则：
 >
 > 1. **`func-definition`** — 配置允许哪些种类的函数定义
-> 2. **`signature-linebreak`** — 控制函数签名的换行风格
-> 3. **`param-destructuring`** — 禁止在函数参数中使用解构模式
+> 2. **`func-signature-linebreak`** — 控制函数签名的换行风格
+> 3. **`func-param-destructuring`** — 禁止在函数参数中使用解构模式
 
 ---
 
@@ -25,8 +25,8 @@ npm install --save-dev @yinxulai/eslint-plugin-peculiar eslint
   "plugins": ["@yinxulai/peculiar"],
   "rules": {
     "@yinxulai/peculiar/func-definition": "warn",
-    "@yinxulai/peculiar/signature-linebreak": ["warn", { "style": "single" }],
-    "@yinxulai/peculiar/param-destructuring": "warn"
+    "@yinxulai/peculiar/func-signature-linebreak": ["warn", { "style": "single" }],
+    "@yinxulai/peculiar/func-param-destructuring": "warn"
   }
 }
 ```
@@ -63,8 +63,8 @@ export default [
     plugins: { peculiar },
     rules: {
       'peculiar/func-definition': 'warn',
-      'peculiar/signature-linebreak': ['warn', { style: 'single' }],
-      'peculiar/param-destructuring': 'warn',
+      'peculiar/func-signature-linebreak': ['warn', { style: 'single' }],
+      'peculiar/func-param-destructuring': 'warn',
     },
   },
 ]
@@ -79,8 +79,8 @@ export default [
 | 规则 | 行为 |
 | --- | --- |
 | `func-definition` | 都允许（不传 `allow` = 4 种函数定义全开） |
-| `signature-linebreak` | 不允许换行（`{ style: 'single' }`，强制签名单行） |
-| `param-destructuring` | 仅允许箭头函数解构（`{ allowIn: ['arrow'] }`，function / method 仍禁用） |
+| `func-signature-linebreak` | 不允许换行（`{ style: 'single' }`，强制签名单行） |
+| `func-param-destructuring` | 仅允许箭头函数解构（`{ allowIn: ['arrow'] }`，function / method 仍禁用） |
 
 ---
 
@@ -110,7 +110,7 @@ export default [
 
 ---
 
-### `signature-linebreak`
+### `func-signature-linebreak`
 
 控制函数签名的换行风格。
 
@@ -124,20 +124,20 @@ export default [
 
 ```jsonc
 // 强制单行(不允许换行)
-{ "@yinxulai/peculiar/signature-linebreak": ["error", { "style": "single" }] }
+{ "@yinxulai/peculiar/func-signature-linebreak": ["error", { "style": "single" }] }
 
 // 强制多行,每个参数独占一行
-{ "@yinxulai/peculiar/signature-linebreak": ["error", { "style": "multiple" }] }
+{ "@yinxulai/peculiar/func-signature-linebreak": ["error", { "style": "multiple" }] }
 
 // 允许单行,但超过 80 字符必须多行
-{ "@yinxulai/peculiar/signature-linebreak": ["error", { "style": "consistent", "maxLength": 80 }] }
+{ "@yinxulai/peculiar/func-signature-linebreak": ["error", { "style": "consistent", "maxLength": 80 }] }
 ```
 
 **不报错的场景**：参数 < 2 个（没东西可换行）。
 
 ---
 
-### `param-destructuring`
+### `func-param-destructuring`
 
 禁止在函数参数中使用解构模式（`ObjectPattern` / `ArrayPattern`），包括 TypeScript 类型注解的情况。
 
@@ -153,7 +153,7 @@ export default [
 
 ```jsonc
 // 仅允许箭头函数解构
-{ "@yinxulai/peculiar/param-destructuring": ["error", { "allowIn": ["arrow"] }] }
+{ "@yinxulai/peculiar/func-param-destructuring": ["error", { "allowIn": ["arrow"] }] }
 ```
 
 **示例**：
@@ -195,10 +195,10 @@ source/
   rules/
     func-definition.ts
     func-definition.test.ts    # 规则测试
-    param-destructuring.ts
-    param-destructuring.test.ts
-    signature-linebreak.ts
-    signature-linebreak.test.ts
+    func-param-destructuring.ts
+    func-param-destructuring.test.ts
+    func-signature-linebreak.ts
+    func-signature-linebreak.test.ts
   utils/
     function-helpers.ts
 ```

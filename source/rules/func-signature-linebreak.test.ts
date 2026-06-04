@@ -1,8 +1,8 @@
-// filepath: source/rules/signature-linebreak.test.ts
+// filepath: source/rules/func-signature-linebreak.test.ts
 import { describe } from 'vitest'
 import { RuleTester } from 'eslint'
 import * as tsParser from '@typescript-eslint/parser'
-import rule from './signature-linebreak'
+import rule from './func-signature-linebreak'
 
 const tester = new RuleTester({
   languageOptions: {
@@ -14,8 +14,8 @@ const tester = new RuleTester({
   },
 })
 
-describe('signature-linebreak', () => {
-  tester.run('signature-linebreak', rule, {
+describe('func-signature-linebreak', () => {
+  tester.run('func-signature-linebreak', rule, {
     valid: [
       // fewer than 2 params => never reports
       { code: 'function foo() {}', options: [{ style: 'multiple' }] },

@@ -1,8 +1,8 @@
-// filepath: source/rules/param-destructuring.test.ts
+// filepath: source/rules/func-param-destructuring.test.ts
 import { describe } from 'vitest'
 import { RuleTester } from 'eslint'
 import * as tsParser from '@typescript-eslint/parser'
-import rule from './param-destructuring'
+import rule from './func-param-destructuring'
 
 const tester = new RuleTester({
   languageOptions: {
@@ -14,8 +14,8 @@ const tester = new RuleTester({
   },
 })
 
-describe('param-destructuring', () => {
-  tester.run('param-destructuring', rule, {
+describe('func-param-destructuring', () => {
+  tester.run('func-param-destructuring', rule, {
     valid: [
       // 没有解构
       { code: 'function foo(a, b) {}' },

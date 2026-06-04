@@ -1,19 +1,19 @@
 import funcDefinition from './rules/func-definition'
-import signatureLinebreak from './rules/signature-linebreak'
-import paramDestructuring from './rules/param-destructuring'
+import funcSignatureLinebreak from './rules/func-signature-linebreak'
+import funcParamDestructuring from './rules/func-param-destructuring'
 // 直接从 package.json 读取元信息 ——
- // `package.json` 与 `output/` 在发包后平级,运行时 `require('../package.json')` 能找到
+// `package.json` 与 `output/` 在发包后平级,运行时 `require('../package.json')` 能找到
 import pkg from '../package.json'
 
 /**
- * 推荐预设里的 `signature-linebreak` 选项 —— 强制签名单行。
+ * 推荐预设里的 `func-signature-linebreak` 选项 —— 强制签名单行。
  * 4 个 config(recommended / strict / flat/recommended / flat/strict)共用,
  * 抽出来避免重复字面量。
  */
 const FORCE_SINGLE_LINE = { style: 'single' } as const
 
 /**
- * 推荐预设里的 `param-destructuring` 选项 —— 仅允许箭头函数解构。
+ * 推荐预设里的 `func-param-destructuring` 选项 —— 仅允许箭头函数解构。
  * function / method 上的解构仍被禁止;4 个 config 共用。
  */
 const ALLOW_ARROW_DESTRUCTURING = { allowIn: ['arrow'] } as const
@@ -25,8 +25,8 @@ const plugin = {
   },
   rules: {
     'func-definition': funcDefinition,
-    'signature-linebreak': signatureLinebreak,
-    'param-destructuring': paramDestructuring,
+    'func-signature-linebreak': funcSignatureLinebreak,
+    'func-param-destructuring': funcParamDestructuring,
   },
 } as const
 
@@ -38,17 +38,17 @@ const plugin = {
  * `plugins` 是字符串数组，rule 命名空间为 `@yinxulai/peculiar`。
  *
  * 三条规则的取向：
- * - `func-definition`     → 都允许（不传 `allow` = 4 种函数定义全开）
- * - `signature-linebreak` → 不允许换行（`{ style: 'single' }`，强制签名单行）
- * - `param-destructuring` → 仅允许箭头函数解构（`{ allowIn: ['arrow'] }`，
- *                            function / method 上的解构仍被禁止）
+ * - `func-definition`            → 都允许（不传 `allow` = 4 种函数定义全开）
+ * - `func-signature-linebreak`   → 不允许换行（`{ style: 'single' }`，强制签名单行）
+ * - `func-param-destructuring`   → 仅允许箭头函数解构（`{ allowIn: ['arrow'] }`，
+ *                                   function / method 上的解构仍被禁止）
  */
 const recommended = {
   plugins: ['@yinxulai/peculiar'],
   rules: {
     '@yinxulai/peculiar/func-definition': ['warn'],
-    '@yinxulai/peculiar/signature-linebreak': ['warn', FORCE_SINGLE_LINE],
-    '@yinxulai/peculiar/param-destructuring': ['warn', ALLOW_ARROW_DESTRUCTURING],
+    '@yinxulai/peculiar/func-signature-linebreak': ['warn', FORCE_SINGLE_LINE],
+    '@yinxulai/peculiar/func-param-destructuring': ['warn', ALLOW_ARROW_DESTRUCTURING],
   },
 } as const
 
@@ -63,8 +63,8 @@ const strict = {
   plugins: ['@yinxulai/peculiar'],
   rules: {
     '@yinxulai/peculiar/func-definition': ['error'],
-    '@yinxulai/peculiar/signature-linebreak': ['error', FORCE_SINGLE_LINE],
-    '@yinxulai/peculiar/param-destructuring': ['error', ALLOW_ARROW_DESTRUCTURING],
+    '@yinxulai/peculiar/func-signature-linebreak': ['error', FORCE_SINGLE_LINE],
+    '@yinxulai/peculiar/func-param-destructuring': ['error', ALLOW_ARROW_DESTRUCTURING],
   },
 } as const
 
@@ -87,8 +87,8 @@ const flatRecommended = [
     plugins: { peculiar: plugin },
     rules: {
       'peculiar/func-definition': ['warn'],
-      'peculiar/signature-linebreak': ['warn', FORCE_SINGLE_LINE],
-      'peculiar/param-destructuring': ['warn', ALLOW_ARROW_DESTRUCTURING],
+      'peculiar/func-signature-linebreak': ['warn', FORCE_SINGLE_LINE],
+      'peculiar/func-param-destructuring': ['warn', ALLOW_ARROW_DESTRUCTURING],
     },
   },
 ] as const
@@ -101,8 +101,8 @@ const flatStrict = [
     plugins: { peculiar: plugin },
     rules: {
       'peculiar/func-definition': ['error'],
-      'peculiar/signature-linebreak': ['error', FORCE_SINGLE_LINE],
-      'peculiar/param-destructuring': ['error', ALLOW_ARROW_DESTRUCTURING],
+      'peculiar/func-signature-linebreak': ['error', FORCE_SINGLE_LINE],
+      'peculiar/func-param-destructuring': ['error', ALLOW_ARROW_DESTRUCTURING],
     },
   },
 ] as const
