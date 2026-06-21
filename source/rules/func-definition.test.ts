@@ -1,4 +1,3 @@
-// filepath: source/rules/func-definition.test.ts
 import { describe } from 'vitest'
 import { RuleTester } from 'eslint'
 import * as tsParser from '@typescript-eslint/parser'
@@ -15,108 +14,128 @@ const tester = new RuleTester({
 })
 
 describe('func-definition', () => {
-  tester.run('func-definition', rule, {
-    valid: [
-      // default (no options) - everything allowed
-      { code: 'function foo() {}' },
-      { code: 'const foo = function () {}' },
-      { code: 'const foo = () => 1' },
-      { code: 'class A { foo() {} }' },
-      { code: 'class A { static bar() {} }' },
-      { code: 'class A { #baz() {} }' },
-      { code: 'class A { foo = () => 1 }' },
-      { code: 'class A { foo = function () {} }' },
+  describe('default behavior', () => {
+    tester.run('func-definition/default', rule, {
+      valid: [
+        { code: 'function foo() {}' },
+        { code: 'const foo = function () {}' },
+        { code: 'const foo = () => 1' },
+        { code: 'class A { foo() {} }' },
+        { code: 'const obj = { foo() {} }' },
+        { code: 'class A { static bar() {} }' },
+        { code: 'class A { #baz() {} }' },
+        { code: 'const obj = { ["foo"]() {} }' },
+        { code: 'declare function foo(): void' },
+      ],
+      invalid: [],
+    })
+  })
 
-      // allow: ['arrow']
-      { code: 'const foo = () => 1', options: [{ allow: ['arrow'] }] },
-      { code: 'const foo = (a, b) => a + b', options: [{ allow: ['arrow'] }] },
-      { code: 'class A { foo = () => 1 }', options: [{ allow: ['arrow'] }] },
+  describe('allow option classification', () => {
+    tester.run('func-definition/allow-option', rule, {
+      valid: [
+        { code: 'const foo = () => 1', options: [{ allow: ['arrow'] }] },
+        { code: 'class A { foo = () => 1 }', options: [{ allow: ['arrow'] }] },
+        { code: 'function foo() {}', options: [{ allow: ['declaration'] }] },
+        { code: 'declare function foo(): void', options: [{ allow: ['declaration'] }] },
+        { code: 'const foo = function () {}', options: [{ allow: ['expression'] }] },
+        { code: 'const obj = { foo: function () {} }', options: [{ allow: ['expression'] }] },
+        { code: 'class A { foo() {} }', options: [{ allow: ['method'] }] },
+        { code: 'const obj = { foo() {} }', options: [{ allow: ['method'] }] },
+        { code: 'class A { foo() {} bar = () => 1 }', options: [{ allow: ['method', 'arrow'] }] },
+      ],
+      invalid: [
+        {
+          code: 'function foo() {}',
+          options: [{ allow: ['arrow'] }],
+          errors: [{ messageId: 'disallowedFunction' }],
+        },
+        {
+          code: 'const foo = () => 1',
+          options: [{ allow: ['declaration'] }],
+          errors: [{ messageId: 'disallowedFunction' }],
+        },
+        {
+          code: 'class A { foo() {} }',
+          options: [{ allow: ['arrow'] }],
+          errors: [{ messageId: 'disallowedFunction' }],
+        },
+        {
+          code: 'const foo = function () {}',
+          options: [{ allow: ['arrow', 'method'] }],
+          errors: [{ messageId: 'disallowedFunction' }],
+        },
+        {
+          code: 'const obj = { foo() {} }',
+          options: [{ allow: ['arrow'] }],
+          errors: [{ messageId: 'disallowedFunction' }],
+        },
+        {
+          code: 'declare function foo(): void',
+          options: [{ allow: ['arrow'] }],
+          errors: [{ messageId: 'disallowedFunction' }],
+        },
+        {
+          code: 'const obj = { foo: function () {} }',
+          options: [{ allow: ['method'] }],
+          errors: [{ messageId: 'disallowedFunction' }],
+        },
+      ],
+    })
+  })
 
-      // allow: ['declaration']
-      { code: 'function foo() {}', options: [{ allow: ['declaration'] }] },
-      { code: 'function bar(a, b, c) {}', options: [{ allow: ['declaration'] }] },
+  describe('nested and mixed contexts', () => {
+    tester.run('func-definition/nested-context', rule, {
+      valid: [
+        {
+          code: 'class A { method() { const inner = () => 1; return inner } }',
+          options: [{ allow: ['method', 'arrow'] }],
+        },
+        {
+          code: 'class A { method() { function inner() {} return inner } }',
+          options: [{ allow: ['method', 'declaration'] }],
+        },
+      ],
+      invalid: [
+        {
+          code: 'class A { method() { const inner = function () {} } }',
+          options: [{ allow: ['method'] }],
+          errors: [{ messageId: 'disallowedFunction' }],
+        },
+        {
+          code: 'class A { method() { const inner = () => 1 } }',
+          options: [{ allow: ['method'] }],
+          errors: [{ messageId: 'disallowedFunction' }],
+        },
+      ],
+    })
+  })
 
-      // allow: ['expression']
-      { code: 'const foo = function () {}', options: [{ allow: ['expression'] }] },
-      { code: 'const foo = function bar() {}', options: [{ allow: ['expression'] }] },
-
-      // allow: ['method']
-      { code: 'class A { foo() {} }', options: [{ allow: ['method'] }] },
-      {
-        code: 'const obj = { foo() {} }',
-        options: [{ allow: ['method'] }],
-      },
-      {
-        code: 'class A { foo = () => 1 }',
-        options: [{ allow: ['method', 'arrow'] }],
-      },
-
-      // allow: ['declaration', 'method']
-      { code: 'function foo() {}', options: [{ allow: ['declaration', 'method'] }] },
-      { code: 'class A { foo() {} }', options: [{ allow: ['declaration', 'method'] }] },
-
-      // TSDeclareFunction - 默认放行 + allow: ['declaration']
-      { code: 'declare function foo(): void' },
-      {
-        code: 'declare function bar(): void',
-        options: [{ allow: ['declaration'] }],
-      },
-    ],
-    invalid: [
-      {
-        code: 'function foo() {}',
-        options: [{ allow: ['arrow'] }],
-        errors: [{ messageId: 'disallowedFunction' }],
-      },
-      {
-        code: 'const foo = () => 1',
-        options: [{ allow: ['declaration'] }],
-        errors: [{ messageId: 'disallowedFunction' }],
-      },
-      {
-        code: 'class A { foo() {} }',
-        options: [{ allow: ['arrow'] }],
-        errors: [{ messageId: 'disallowedFunction' }],
-      },
-      {
-        code: 'const foo = function () {}',
-        options: [{ allow: ['arrow', 'method'] }],
-        errors: [{ messageId: 'disallowedFunction' }],
-      },
-      {
-        code: 'const obj = { foo() {} }',
-        options: [{ allow: ['arrow'] }],
-        errors: [{ messageId: 'disallowedFunction' }],
-      },
-      // TSDeclareFunction 不在 allow 列表中
-      {
-        code: 'declare function foo(): void',
-        options: [{ allow: ['arrow'] }],
-        errors: [{ messageId: 'disallowedFunction' }],
-      },
-      // invalid allow option
-      {
-        code: 'function foo() {}',
-        options: [{ allow: [] }],
-        errors: [{ messageId: 'invalidAllowOption' }],
-      },
-      {
-        code: 'function foo() {}',
-        options: [{ allow: ['nope'] }],
-        errors: [{ messageId: 'invalidAllowOption' }],
-      },
-      // multiple invalid values
-      {
-        code: 'function foo() {}',
-        options: [{ allow: ['nope', 'also-nope'] }],
-        errors: [{ messageId: 'invalidAllowOption' }],
-      },
-      // mixed valid + invalid
-      {
-        code: 'function foo() {}',
-        options: [{ allow: ['arrow', 'oops'] }],
-        errors: [{ messageId: 'invalidAllowOption' }],
-      },
-    ],
+  describe('invalid options', () => {
+    tester.run('func-definition/invalid-options', rule, {
+      valid: [],
+      invalid: [
+        {
+          code: 'function foo() {}',
+          options: [{ allow: [] }],
+          errors: [{ messageId: 'invalidAllowOption' }],
+        },
+        {
+          code: 'function foo() {}',
+          options: [{ allow: ['nope'] }],
+          errors: [{ messageId: 'invalidAllowOption' }],
+        },
+        {
+          code: 'function foo() {}',
+          options: [{ allow: ['nope', 'also-nope'] }],
+          errors: [{ messageId: 'invalidAllowOption' }],
+        },
+        {
+          code: 'function foo() {}',
+          options: [{ allow: ['arrow', 'oops'] }],
+          errors: [{ messageId: 'invalidAllowOption' }],
+        },
+      ],
+    })
   })
 })

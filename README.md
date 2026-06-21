@@ -2,11 +2,12 @@
 
 > 一个聚焦"函数定义"相关规则的 ESLint 插件：用 TypeScript 编写。
 >
-> 提供三个规则：
+> 提供四个规则：
 >
 > 1. **`func-definition`** — 配置允许哪些种类的函数定义
 > 2. **`func-signature-linebreak`** — 控制函数签名的换行风格
 > 3. **`func-param-destructuring`** — 禁止在函数参数中使用解构模式
+> 4. **`func-param-inline-object-type`** — 禁止在函数参数签名中直接写对象字面量类型
 
 ---
 
@@ -28,7 +29,8 @@ npm install --save-dev @yinxulai/eslint-plugin-peculiar eslint
   "rules": {
     "@yinxulai/peculiar/func-definition": "warn",
     "@yinxulai/peculiar/func-signature-linebreak": ["warn", { "style": "single" }],
-    "@yinxulai/peculiar/func-param-destructuring": "warn"
+    "@yinxulai/peculiar/func-param-destructuring": "warn",
+    "@yinxulai/peculiar/func-param-inline-object-type": "warn"
   }
 }
 ```
@@ -67,6 +69,7 @@ export default [
       'peculiar/func-definition': 'warn',
       'peculiar/func-signature-linebreak': ['warn', { style: 'single' }],
       'peculiar/func-param-destructuring': 'warn',
+      'peculiar/func-param-inline-object-type': 'warn',
     },
   },
 ]
@@ -83,6 +86,7 @@ export default [
 | `func-definition` | 都允许（不传 `allow` = 4 种函数定义全开） |
 | `func-signature-linebreak` | 不允许换行（`{ style: 'single' }`，强制签名单行） |
 | `func-param-destructuring` | 仅允许箭头函数解构（`{ allowIn: ['arrow'] }`，function / method 仍禁用） |
+| `func-param-inline-object-type` | 禁止在参数类型注解中直接写对象字面量类型（如 `params: { a: 1 }`） |
 
 > `func-definition` 与 `func-param-destructuring` 的"默认方向"是**相反**的：
 > - `func-definition` 不传 `allow` = 4 种函数定义都允许
@@ -161,7 +165,7 @@ export default [
 
 **不报错的场景**：参数 < 2 个（没东西可换行）。
 
-**fix 安全护栏**:自动修复仅在签名 `()` 内"无参数外注释"时生效。如果参数之间 / 之前 / 之后有内联块/行注释,fix 会**只 report 不 fix**(`output: null`),把决定权交给人工。
+本规则不提供自动修复,仅通过错误或 warning 提示你手动调整签名格式。
 
 ---
 
@@ -203,12 +207,27 @@ class A { method(coord) {} }
 > - 解构出来的属性是否被使用不在本规则范围，使用官方的 [`no-unused-vars`](https://eslint.org/docs/latest/rules/no-unused-vars)。
 > - 用途之一是绕过 [`max-params`](https://eslint.org/docs/latest/rules/max-params) 计数 —— `function f({a, b, c, d, e})` 在官方 `max-params` 里只算 1 个参数，启用本规则可强制显式书写。
 
-**fix 条件**:自动修复仅在"安全"场景下提供 —— 即:
-- 函数体是 `BlockStatement`(不是箭头表达式体)
-- 没有 `this` 形参(避免改写挪动其它形参索引)
-- 解构形参没有外层默认值(避免把默认值从 Pattern 上剥到 Identifier 上)
+本规则不提供自动修复,仅通过错误或 warning 提示你手动改写为显式参数。
 
-不满足上述条件时仍会报 `paramDestructuring`,但不带 fix。
+---
+
+### `func-param-inline-object-type`
+
+禁止在函数参数签名中直接写对象字面量类型。
+
+```ts
+// ❌ 报错
+function help(params: { a: 1; b: 2 }) {}
+class A { help(params: { a: number; b: number }) {} }
+
+// ✅ 建议写法
+type HelpParams = { a: 1; b: 2 }
+function help(params: HelpParams) {}
+```
+
+本规则适用于普通函数、箭头函数、类方法、对象方法，也适用于解构参数上的类型注解（例如 `function f({ a }: { a: number }) {}`）。
+
+本规则不提供自动修复,仅通过错误或 warning 引导你提取 `type`/`interface` 后再引用。
 
 ---
 

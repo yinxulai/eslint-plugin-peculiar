@@ -3,10 +3,11 @@ import { describe, it, expect } from 'vitest'
 import plugin from './index'
 
 describe('plugin shape', () => {
-  it('exports the three expected rules', () => {
+  it('exports the expected rules', () => {
     expect(Object.keys(plugin.rules).sort()).toEqual([
       'func-definition',
       'func-param-destructuring',
+      'func-param-inline-object-type',
       'func-signature-linebreak',
     ])
   })
@@ -90,11 +91,12 @@ describe('plugin shape', () => {
       }
     })
 
-    it('flat/recommended registers all three rules', () => {
+    it('flat/recommended registers all rules', () => {
       const block = plugin.configs['flat/recommended'][0]!
       expect(Object.keys(block.rules).sort()).toEqual([
         'peculiar/func-definition',
         'peculiar/func-param-destructuring',
+        'peculiar/func-param-inline-object-type',
         'peculiar/func-signature-linebreak',
       ])
     })

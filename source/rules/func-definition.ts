@@ -49,9 +49,9 @@ const rule: Rule.RuleModule = {
     ],
     messages: {
       disallowedFunction:
-        'Function of kind "{{kind}}" is not allowed. Allowed kinds: [{{allowed}}].',
+        'Function kind "{{kind}}" is not allowed by this config. Bad: const fn = function () {} (expression). Good: rewrite to one of [{{allowed}}].',
       invalidAllowOption:
-        'Invalid `allow` option. It must be an array containing one or more of: {{kinds}}.',
+        'Invalid `allow` option. Bad: { allow: [] } or { allow: ["foo"] }. Good: { allow: ["arrow", "method"] }. Supported kinds: {{kinds}}.',
     },
   },
   create(context: Rule.RuleContext) {

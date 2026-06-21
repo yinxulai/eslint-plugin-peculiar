@@ -1,6 +1,7 @@
 import funcDefinition from './rules/func-definition'
 import funcSignatureLinebreak from './rules/func-signature-linebreak'
 import funcParamDestructuring from './rules/func-param-destructuring'
+import funcParamInlineObjectType from './rules/func-param-inline-object-type'
 // 直接从 package.json 读取元信息 ——
 // `package.json` 与 `output/` 在发包后平级,运行时 `require('../package.json')` 能找到
 import pkg from '../package.json'
@@ -26,6 +27,7 @@ const plugin = {
     'func-definition': funcDefinition,
     'func-signature-linebreak': funcSignatureLinebreak,
     'func-param-destructuring': funcParamDestructuring,
+    'func-param-inline-object-type': funcParamInlineObjectType,
   },
 } as const
 
@@ -53,6 +55,7 @@ function eslintrcConfig(severity: Severity) {
         severity,
         ALLOW_ARROW_DESTRUCTURING,
       ],
+      [`${NAMESPACE_OLD}/func-param-inline-object-type`]: [severity],
     },
   } as const
 }
@@ -77,6 +80,7 @@ function flatConfig(severity: Severity) {
           severity,
           ALLOW_ARROW_DESTRUCTURING,
         ],
+        [`${NAMESPACE_FLAT}/func-param-inline-object-type`]: [severity],
       },
     },
   ] as const
@@ -85,9 +89,9 @@ function flatConfig(severity: Severity) {
 export = {
   ...plugin,
   configs: {
-    recommended: eslintrcConfig('warn'),
     strict: eslintrcConfig('error'),
-    'flat/recommended': flatConfig('warn'),
+    recommended: eslintrcConfig('warn'),
     'flat/strict': flatConfig('error'),
+    'flat/recommended': flatConfig('warn'),
   },
 } as const

@@ -1,4 +1,4 @@
-import type { Rule, SourceCode } from 'eslint'
+import type { Rule } from 'eslint'
 import { AST_NODE_TYPES, TSESTree } from '@typescript-eslint/utils'
 import { isInsideMethod } from '../utils/function-helpers'
 
@@ -6,22 +6,9 @@ type AllowedContext = 'function' | 'arrow' | 'method'
 
 type Options = [
   {
-    /**
-     * 允许参数解构的函数类型。
-     * - `function` → 顶层 function declaration / function expression(非方法上下文)
-     * - `arrow`    → 箭头函数
-     * - `method`   → 类/对象方法(通过内部 `FunctionExpression` 自动覆盖)
-     *
-     * 显式传入空数组 / 含未知值会作为配置错误上报(`invalidAllowInOption`),
-     * 不传该选项 = 全部不允许(默认禁用)。
-     *
-     * @default undefined (= 全禁)
-     */
     allowIn?: AllowedContext[]
   },
 ]
-
-type MessageIds = 'paramDestructuring' | 'invalidAllowInOption'
 
 type FunctionLike =
   | TSESTree.FunctionDeclaration
@@ -37,15 +24,6 @@ const ALLOWED_CONTEXTS: readonly AllowedContext[] = [
 const rule: Rule.RuleModule = {
   meta: {
     type: 'suggestion',
-    /**
-     * 仅在"安全"场景下提供 fix —— 即:
-     * - 函数体是 BlockStatement(不是箭头表达式体)
-     * - 没有 `this` 形参(避免改写挪动其它形参索引)
-     * - 解构形参没有外层默认值(避免把默认值从 Pattern 上剥到 Identifier 上)
-     *
-     * 不满足上述条件时仍会报 `paramDestructuring`,但不带 fix。
-     */
-    fixable: 'code',
     docs: {
       description: 'Disallow destructuring patterns in function parameters.',
       recommended: false,
@@ -55,8 +33,6 @@ const rule: Rule.RuleModule = {
       {
         type: 'object',
         properties: {
-          // 不在 schema 层做 minItems / enum 强约束,留到 create() 里报错
-          // (空数组、含未知值都作为 `invalidAllowInOption` 上报,而不是 schema 报错)
           allowIn: {
             type: 'array',
             items: {
@@ -70,16 +46,15 @@ const rule: Rule.RuleModule = {
     ],
     messages: {
       paramDestructuring:
-        'Destructuring in function parameters is not allowed. Use explicit parameters instead.',
+        'Destructuring in parameters is not allowed. Bad: function foo({ a, b }) {}. Good: function foo(params) { const { a, b } = params }.',
       invalidAllowInOption:
-        'Invalid `allowIn` option. It must be an array of one or more of: function, arrow, method.',
+        'Invalid `allowIn` option. Bad: { allowIn: [] } or { allowIn: ["foo"] }. Good: { allowIn: ["arrow"] } or { allowIn: ["function", "method"] }.',
     },
   },
   create(context: Rule.RuleContext) {
     const options = (context.options[0] ?? {}) as Options[0]
     const rawAllowIn = options.allowIn
 
-    // 选项校验
     if (rawAllowIn !== undefined) {
       if (!Array.isArray(rawAllowIn) || rawAllowIn.length === 0) {
         context.report({
@@ -88,6 +63,7 @@ const rule: Rule.RuleModule = {
         })
         return {}
       }
+
       const invalid = rawAllowIn.filter((c) => !ALLOWED_CONTEXTS.includes(c))
       if (invalid.length > 0) {
         context.report({
@@ -100,138 +76,21 @@ const rule: Rule.RuleModule = {
 
     const allowSet: Set<AllowedContext> = new Set(rawAllowIn ?? [])
 
-    /**
-     * 将一个函数表达式归类到 `function` / `arrow` / `method` 之一;
-     * 不是这三种 → 返回 null(意味着 visitor 误调,理论上不会发生)。
-     */
     function classify(node: FunctionLike): AllowedContext {
       if (node.type === AST_NODE_TYPES.ArrowFunctionExpression) return 'arrow'
       if (node.type === AST_NODE_TYPES.FunctionDeclaration) return 'function'
-      // FunctionExpression:method = inside MethodDefinition / Property(method=true)
       return isInsideMethod(node) ? 'method' : 'function'
     }
 
-    /**
-     * 提取 destructure 模式的"纯模式文本"和"TS 类型注解文本"。
-     * 例:({ a, b }: Props) → patternText=`{ a, b }`, typeText=`: Props`
-     * 例:[a, b]            → patternText=`[a, b]`,  typeText=``
-     */
-    function getPatternInfo(
-      sc: SourceCode,
-      pattern: TSESTree.ObjectPattern | TSESTree.ArrayPattern,
-    ): { patternText: string; typeText: string } {
-      const ta = (pattern as TSESTree.ObjectPattern).typeAnnotation
-      if (ta) {
-        const patternText = sc.text.slice(pattern.range[0], ta.range[0]).trim()
-        const typeText = sc.text.slice(ta.range[0], ta.range[1])
-        return { patternText, typeText }
-      }
-      // 没有类型注解时,直接按 range 切片
-      return {
-        patternText: sc.text.slice(pattern.range[0], pattern.range[1]),
-        typeText: '',
-      }
-    }
-
-    /**
-     * 这个函数是否处于"可安全 fix"的状态。
-     * 不满足的会照常报 `paramDestructuring`,但不带 fix。
-     */
-    function isFixable(node: FunctionLike): boolean {
-      if (node.body.type !== AST_NODE_TYPES.BlockStatement) return false
-      // 有 `this` 形参(TSESTree 表示成 name === 'this' 的 Identifier)时跳过 fix,
-      // 改写会挪动其它形参索引
-      const first = node.params[0]
-      if (
-        first &&
-        first.type === AST_NODE_TYPES.Identifier &&
-        (first as TSESTree.Identifier).name === 'this'
-      ) {
-        return false
-      }
-      for (const param of node.params) {
-        if (param.type === AST_NODE_TYPES.AssignmentPattern) {
-          const left = (param as TSESTree.AssignmentPattern).left
-          if (
-            left.type === AST_NODE_TYPES.ObjectPattern ||
-            left.type === AST_NODE_TYPES.ArrayPattern
-          ) {
-            return false
-          }
-        }
-      }
-      return true
-    }
-
-    function buildFix(
-      fixer: Rule.RuleFixer,
-      sc: SourceCode,
-      node: FunctionLike,
-    ): Rule.Fix[] {
-      const params = node.params
-      const body = node.body as TSESTree.BlockStatement
-      if (params.length === 0) return []
-
-      const newParamTexts: string[] = []
-      const constStmts: string[] = []
-      let destructIndex = 0
-
-      for (const param of params) {
-        if (
-          param.type === AST_NODE_TYPES.ObjectPattern ||
-          param.type === AST_NODE_TYPES.ArrayPattern
-        ) {
-          const name = `arg${destructIndex++}`
-          const { patternText, typeText } = getPatternInfo(sc, param)
-          newParamTexts.push(name + typeText)
-          constStmts.push(`const ${patternText} = ${name}`)
-        } else {
-          // 普通形参:直接按 range 切片
-          newParamTexts.push(sc.text.slice(param.range[0], param.range[1]))
-        }
-      }
-
-      const paramsRange: [number, number] = [
-        params[0]!.range[0],
-        params[params.length - 1]!.range[1],
-      ]
-
-      // 使用 token API 来判断格式和获取缩进
-      // 使用 getTokenByRangeStart 通过 range 位置获取 token，避免类型转换
-      const openBrace = sc.getTokenByRangeStart(body.range[0])!
-      const closeBrace = sc.getTokenByRangeStart(body.range[1] - 1)!
-      const tokenAfterBrace = sc.getTokenAfter(openBrace)
-      
-      // 检查函数体是否为空 (开括号后面直接是闭括号)
-      const isEmpty = tokenAfterBrace?.value === '}'
-      
-      // 检查开括号和下一个 token 是否在同一行
-      const hasLineBreak = tokenAfterBrace 
-        ? openBrace.loc.end.line < tokenAfterBrace.loc.start.line
-        : false
-      
-      // 获取缩进：
-      // - 如果已有内容且有换行，使用第一个 token 的缩进（保持现有格式）
-      // - 否则不使用缩进（直接跟在开括号后）
-      const bodyIndent = hasLineBreak && !isEmpty && tokenAfterBrace
-        ? ' '.repeat(tokenAfterBrace.loc.start.column)
-        : '' // 单行函数体不使用缩进
-      
-      // 构建插入文本
-      let insertText = ''
-      
-      // 如果没有换行（单行函数体或空函数体），const 语句直接跟在开括号后
-      if (!hasLineBreak) {
-        insertText = constStmts.join(';\n') + ';\n'
-      } else {
-        // 已有换行，保持原有格式
-        insertText = bodyIndent + constStmts.join(';\n' + bodyIndent) + ';\n'
-      }
-
-      return [
-        fixer.replaceTextRange(paramsRange, newParamTexts.join(', ')),
-        fixer.insertTextAfter(openBrace, insertText),
-      ]
+    function hasDestructuringParam(node: FunctionLike): boolean {
+      return node.params.some(
+        (p) =>
+          p.type === AST_NODE_TYPES.ObjectPattern ||
+          p.type === AST_NODE_TYPES.ArrayPattern ||
+          (p.type === AST_NODE_TYPES.AssignmentPattern &&
+            (p.left.type === AST_NODE_TYPES.ObjectPattern ||
+              p.left.type === AST_NODE_TYPES.ArrayPattern)),
+      )
     }
 
     function check(node: Rule.Node): void {
@@ -242,30 +101,14 @@ const rule: Rule.RuleModule = {
       ) {
         return
       }
+
       const fnNode = node as unknown as FunctionLike
-
-      // 默认全禁(allowIn 未传);非空 allowIn 时按 set 查
       if (allowSet.has(classify(fnNode))) return
+      if (!hasDestructuringParam(fnNode)) return
 
-      const hasDestructuring = fnNode.params.some(
-        (p) =>
-          p.type === AST_NODE_TYPES.ObjectPattern ||
-          p.type === AST_NODE_TYPES.ArrayPattern ||
-          (p.type === AST_NODE_TYPES.AssignmentPattern &&
-            ((p as TSESTree.AssignmentPattern).left.type ===
-              AST_NODE_TYPES.ObjectPattern ||
-              (p as TSESTree.AssignmentPattern).left.type ===
-                AST_NODE_TYPES.ArrayPattern)),
-      )
-      if (!hasDestructuring) return
-
-      const fixable = isFixable(fnNode)
       context.report({
         node,
         messageId: 'paramDestructuring',
-        fix: fixable
-          ? (fixer) => buildFix(fixer, context.sourceCode, fnNode)
-          : undefined,
       })
     }
 
